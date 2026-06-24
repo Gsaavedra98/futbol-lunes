@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { LoadingCard } from "@/components/loading-card";
 import { MatchSummary } from "@/components/match-summary";
 import { PublicList } from "@/components/public-list";
+import { ErrorCard } from "@/components/error-card";
 import { getCurrentMatch, getData, getPublicLists } from "@/lib/store";
 import type { Match, RegistrationWithPlayer } from "@/lib/types";
 
@@ -12,18 +13,25 @@ export default function ListPage() {
   const [confirmed, setConfirmed] = useState<RegistrationWithPlayer[]>([]);
   const [waitlist, setWaitlist] = useState<RegistrationWithPlayer[]>([]);
   const [available, setAvailable] = useState(0);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getData().then((data) => {
-      const current = getCurrentMatch(data);
-      if (!current) return;
-      const lists = getPublicLists(data, current);
-      setMatch(current);
-      setConfirmed(lists.confirmed);
-      setWaitlist(lists.waitlist);
-      setAvailable(lists.available);
-    });
+    getData()
+      .then((data) => {
+        const current = getCurrentMatch(data);
+        if (!current) return;
+        const lists = getPublicLists(data, current);
+        setMatch(current);
+        setConfirmed(lists.confirmed);
+        setWaitlist(lists.waitlist);
+        setAvailable(lists.available);
+      })
+      .catch((currentError) => setError(currentError instanceof Error ? currentError.message : "No se pudo cargar la lista."));
   }, []);
+
+  if (error) {
+    return <ErrorCard message={error} />;
+  }
 
   if (!match) {
     return <LoadingCard />;

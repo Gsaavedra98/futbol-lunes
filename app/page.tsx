@@ -5,27 +5,35 @@ import { ClipboardList, ListChecks, UserMinus, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { LoadingCard } from "@/components/loading-card";
 import { MatchSummary } from "@/components/match-summary";
+import { ErrorCard } from "@/components/error-card";
 import type { AppData, Match } from "@/lib/types";
 import { getCurrentMatch, getData, getPublicLists } from "@/lib/store";
 
 export default function HomePage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [counts, setCounts] = useState({ confirmed: 0, waitlist: 0, available: 0 });
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getData().then((data: AppData) => {
-      const current = getCurrentMatch(data);
-      setMatch(current);
-      if (current) {
-        const lists = getPublicLists(data, current);
-        setCounts({
-          confirmed: lists.confirmed.length,
-          waitlist: lists.waitlist.length,
-          available: lists.available
-        });
-      }
-    });
+    getData()
+      .then((data: AppData) => {
+        const current = getCurrentMatch(data);
+        setMatch(current);
+        if (current) {
+          const lists = getPublicLists(data, current);
+          setCounts({
+            confirmed: lists.confirmed.length,
+            waitlist: lists.waitlist.length,
+            available: lists.available
+          });
+        }
+      })
+      .catch((currentError) => setError(currentError instanceof Error ? currentError.message : "No se pudo cargar la app."));
   }, []);
+
+  if (error) {
+    return <ErrorCard message={error} />;
+  }
 
   if (!match) {
     return <LoadingCard />;

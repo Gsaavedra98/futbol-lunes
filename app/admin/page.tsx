@@ -4,9 +4,10 @@ import { Clipboard, Lock, RefreshCcw, Save } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { LoadingCard } from "@/components/loading-card";
 import { StatusPill } from "@/components/status-pill";
+import { ErrorCard } from "@/components/error-card";
 import {
   getCurrentMatch,
-  getData,
+  getAdminData,
   updateCancellationDecision,
   updateMatch,
   updatePayment,
@@ -27,24 +28,36 @@ import { formatCurrency, formatDate, generateWhatsAppSummary, isSameMonday, regi
 
 export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [data, setData] = useState<AppData | null>(null);
   const [match, setMatch] = useState<Match | null>(null);
   const [includeDebts, setIncludeDebts] = useState(true);
+  const [dataError, setDataError] = useState("");
 
   async function refresh() {
-    const nextData = await getData();
-    const current = getCurrentMatch(nextData);
-    setData(nextData);
-    setMatch(current);
+    try {
+      setDataError("");
+      const nextData = await getAdminData();
+      const current = getCurrentMatch(nextData);
+      setData(nextData);
+      setMatch(current);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "No se pudieron cargar los datos.");
+    }
   }
 
   useEffect(() => {
-    if (window.sessionStorage.getItem("futbol-lunes-admin") === "ok") {
-      setAuthorized(true);
-      refresh();
-    }
+    getAdminData()
+      .then((nextData) => {
+        const current = getCurrentMatch(nextData);
+        setData(nextData);
+        setMatch(current);
+        setAuthorized(true);
+      })
+      .catch(() => setAuthorized(false))
+      .finally(() => setCheckingSession(false));
   }, []);
 
   async function login(event: FormEvent<HTMLFormElement>) {
@@ -61,9 +74,12 @@ export default function AdminPage() {
       return;
     }
 
-    window.sessionStorage.setItem("futbol-lunes-admin", "ok");
     setAuthorized(true);
     refresh();
+  }
+
+  if (checkingSession) {
+    return <LoadingCard />;
   }
 
   if (!authorized) {
@@ -90,7 +106,7 @@ export default function AdminPage() {
   }
 
   if (!data || !match) {
-    return <LoadingCard />;
+    return dataError ? <ErrorCard message={dataError} /> : <LoadingCard />;
   }
 
   const registrations = registrationsForMatch(data, match.id);
@@ -137,7 +153,7 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await updateMatch(form);
+    await updateMatch({ id: match.id, ...form });
     onSaved();
   }
 
@@ -300,12 +316,12 @@ function PaymentsAdmin({
   const confirmed = useMemo(() => registrations.filter((registration) => registration.status === "confirmed"), [registrations]);
 
   async function attendance(playerId: string, attended: boolean) {
-    await upsertAttendance(playerId, attended);
+    await upsertAttendance(match.id, playerId, attended);
     onChanged();
   }
 
   async function payment(playerId: string, status: PaymentStatus) {
-    await updatePayment(playerId, status);
+    await updatePayment(match.id, playerId, match.price_per_player, status);
     onChanged();
   }
 

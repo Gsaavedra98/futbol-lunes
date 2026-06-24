@@ -19,7 +19,7 @@ En muchos grupos de fútbol la organización ocurre en mensajes sueltos: se pier
 - Control de asistencia, pagos y deudas.
 - Resumen copiable para WhatsApp.
 - PWA con manifest, service worker e ícono temporal.
-- Fallback local con datos mock para demo de portafolio.
+- Fallback local con datos mock solo para demo en desarrollo.
 
 ## Stack
 
@@ -36,10 +36,13 @@ Crea un archivo `.env.local`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=tu-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 ADMIN_PASSWORD=una-clave-segura
 ```
 
-Si no configuras Supabase, la app usa `localStorage` con datos de prueba para facilitar la demo.
+`SUPABASE_SERVICE_ROLE_KEY` nunca debe tener prefijo `NEXT_PUBLIC`. Esa clave solo se usa del lado del servidor para el panel administrador.
+
+Si no configuras Supabase, la app solo usa `localStorage` como demo en desarrollo. En producción Supabase es obligatorio.
 
 ## Correr Localmente
 
@@ -74,6 +77,41 @@ El script crea las tablas:
 - `attendance`
 
 También inserta un partido de prueba, 15 jugadores, 12 confirmados y 3 en lista de espera.
+
+El script habilita Row Level Security en todas las tablas y deja al público con acceso mínimo:
+
+- Ver partido activo.
+- Ver lista pública sin teléfonos.
+- Crear inscripción mediante RPC controlada.
+- Crear cancelación mediante RPC controlada.
+
+Pagos, asistencia, deudas y decisiones administrativas no pueden gestionarse con la anon key.
+
+## Uso En Producción
+
+Para uso real desde Vercel, configura estas variables en el proyecto:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=tu-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
+ADMIN_PASSWORD=una-clave-segura
+```
+
+Importante:
+
+- `SUPABASE_SERVICE_ROLE_KEY` no debe tener prefijo `NEXT_PUBLIC`.
+- No guardes `SUPABASE_SERVICE_ROLE_KEY` en código fuente.
+- `localStorage` es solo para demo local en `NODE_ENV=development`.
+- En producción, si faltan variables de Supabase, la app muestra “La base de datos no está configurada”.
+
+Pasos:
+
+1. Ejecuta `supabase/schema.sql` en el SQL editor de Supabase.
+2. Copia `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` desde Supabase.
+3. Copia `SUPABASE_SERVICE_ROLE_KEY` desde Supabase Project Settings > API.
+4. Configura `ADMIN_PASSWORD` en Vercel.
+5. Despliega en Vercel.
 
 ## Despliegue
 

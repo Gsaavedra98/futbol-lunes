@@ -88,6 +88,11 @@ with seed_players(name, pos) as (
 inserted_players as (
   insert into players (name)
   select name from seed_players
+  where not exists (
+    select 1
+    from players
+    where lower(players.name) = lower(seed_players.name)
+  )
   on conflict do nothing
   returning id, name
 )
@@ -132,6 +137,12 @@ revoke all on registrations from anon, authenticated;
 revoke all on cancellations from anon, authenticated;
 revoke all on payments from anon, authenticated;
 revoke all on attendance from anon, authenticated;
+revoke all on matches from public;
+revoke all on players from public;
+revoke all on registrations from public;
+revoke all on cancellations from public;
+revoke all on payments from public;
+revoke all on attendance from public;
 
 create policy "Public can view active matches"
 on matches
