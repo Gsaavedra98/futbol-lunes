@@ -39,10 +39,13 @@ export type Cancellation = {
   player_id: string;
   action_type: CancellationAction;
   declared_status: DeclaredStatus;
+  previous_status?: RegistrationStatus | null;
   has_replacement: boolean;
   replacement_name?: string | null;
   note?: string | null;
   admin_decision: AdminDecision;
+  possible_debt?: boolean;
+  promoted_player_id?: string | null;
   created_at: string;
 };
 
@@ -80,4 +83,5 @@ export type RegistrationWithPlayer = Registration & {
 
 export type CancellationWithPlayer = Cancellation & {
   player: Player;
+  promoted_player?: Player | null;
 };

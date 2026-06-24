@@ -36,6 +36,8 @@ Crea un archivo `.env.local`:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=tu-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+# Opcional si tu proyecto usa publishable keys nuevas:
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu-publishable-key
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 ADMIN_PASSWORD=una-clave-segura
 ```
@@ -94,6 +96,8 @@ Para uso real desde Vercel, configura estas variables en el proyecto:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=tu-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+# Opcional si tu proyecto usa publishable keys nuevas:
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu-publishable-key
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 ADMIN_PASSWORD=una-clave-segura
 ```
@@ -108,7 +112,7 @@ Importante:
 Pasos:
 
 1. Ejecuta `supabase/schema.sql` en el SQL editor de Supabase.
-2. Copia `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` desde Supabase.
+2. Copia `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` desde Supabase. Si tu proyecto usa publishable keys nuevas, puedes configurar `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 3. Copia `SUPABASE_SERVICE_ROLE_KEY` desde Supabase Project Settings > API.
 4. Configura `ADMIN_PASSWORD` en Vercel.
 5. Despliega en Vercel.

@@ -29,18 +29,30 @@ create table if not exists registrations (
   unique (match_id, player_id)
 );
 
+alter table registrations drop constraint if exists registrations_match_id_player_id_key;
+create unique index if not exists registrations_one_active_per_player_match
+on registrations(match_id, player_id)
+where status <> 'cancelled';
+
 create table if not exists cancellations (
   id uuid primary key default gen_random_uuid(),
   match_id uuid not null references matches(id) on delete cascade,
   player_id uuid not null references players(id) on delete cascade,
   action_type text not null check (action_type in ('cancel', 'cancel_with_replacement', 'replacement')),
   declared_status text not null check (declared_status in ('confirmed', 'waitlist', 'unknown')),
+  previous_status text check (previous_status in ('confirmed', 'waitlist', 'cancelled', 'replacement')),
   has_replacement boolean not null default false,
   replacement_name text,
   note text,
   admin_decision text not null check (admin_decision in ('pending', 'waived', 'debt', 'replaced')) default 'pending',
+  possible_debt boolean not null default false,
+  promoted_player_id uuid references players(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+alter table cancellations add column if not exists previous_status text check (previous_status in ('confirmed', 'waitlist', 'cancelled', 'replacement'));
+alter table cancellations add column if not exists possible_debt boolean not null default false;
+alter table cancellations add column if not exists promoted_player_id uuid references players(id) on delete set null;
 
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
@@ -160,21 +172,80 @@ grant select on matches to anon, authenticated;
 -- Public read model: expose names and list status, never phone numbers.
 drop view if exists public_match_registrations;
 create view public_match_registrations as
+with active_registrations as (
+  select
+    registrations.id,
+    registrations.match_id,
+    registrations.player_id,
+    registrations.created_at,
+    row_number() over (
+      partition by registrations.match_id
+      order by registrations.created_at asc, registrations.id asc
+    ) as active_position
+  from registrations
+  where registrations.status <> 'cancelled'
+)
 select
-  registrations.id,
-  registrations.match_id,
-  registrations.position,
-  registrations.status,
-  registrations.created_at,
+  active_registrations.id,
+  active_registrations.match_id,
+  active_registrations.active_position as position,
+  case
+    when active_registrations.active_position <= matches.active_capacity then 'confirmed'
+    else 'waitlist'
+  end as status,
+  active_registrations.created_at,
   players.name as player_name
-from registrations
-join players on players.id = registrations.player_id
-join matches on matches.id = registrations.match_id
+from active_registrations
+join players on players.id = active_registrations.player_id
+join matches on matches.id = active_registrations.match_id
 where matches.status = 'open'
-  and registrations.status in ('confirmed', 'waitlist');
+order by active_registrations.active_position asc;
 
 revoke all on public_match_registrations from public;
 grant select on public_match_registrations to anon, authenticated;
+
+-- Central dynamic list recalculation. Cancelled registrations keep their historical
+-- record, while active registrations are compacted by signup time.
+drop function if exists recalculate_match_registrations(uuid) cascade;
+create or replace function recalculate_match_registrations(p_match_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  selected_capacity integer;
+begin
+  select active_capacity
+  into selected_capacity
+  from matches
+  where id = p_match_id;
+
+  if selected_capacity is null then
+    raise exception 'Partido no encontrado';
+  end if;
+
+  with ordered as (
+    select
+      registrations.id,
+      row_number() over (order by registrations.created_at asc, registrations.id asc) as active_position
+    from registrations
+    where registrations.match_id = p_match_id
+      and registrations.status <> 'cancelled'
+  )
+  update registrations
+  set
+    position = ordered.active_position,
+    status = case
+      when ordered.active_position <= selected_capacity then 'confirmed'
+      else 'waitlist'
+    end
+  from ordered
+  where registrations.id = ordered.id;
+end;
+$$;
+
+revoke all on function recalculate_match_registrations(uuid) from public;
 
 -- Controlled public signup helper. This avoids exposing phone through reads and keeps
 -- position/status calculation inside the database.
@@ -197,8 +268,7 @@ as $$
 declare
   selected_match matches%rowtype;
   selected_player_id uuid;
-  next_position integer;
-  calculated_status text;
+  existing_active_registration_id uuid;
 begin
   if length(btrim(p_player_name)) < 3 then
     raise exception 'Nombre inválido';
@@ -216,25 +286,46 @@ begin
     raise exception 'No hay partido abierto';
   end if;
 
-  insert into players (name, phone)
-  values (btrim(p_player_name), nullif(btrim(coalesce(p_player_phone, '')), ''))
-  returning id into selected_player_id;
-
-  select coalesce(max(registrations.position), 0) + 1
-  into next_position
+  select registrations.id
+  into existing_active_registration_id
   from registrations
+  join players on players.id = registrations.player_id
   where registrations.match_id = selected_match.id
-    and registrations.status <> 'cancelled';
+    and registrations.status <> 'cancelled'
+    and lower(players.name) = lower(btrim(p_player_name))
+  limit 1;
 
-  calculated_status := case
-    when next_position <= selected_match.active_capacity then 'confirmed'
-    else 'waitlist'
-  end;
+  if existing_active_registration_id is not null then
+    raise exception 'Ya tienes una inscripción activa para este partido.';
+  end if;
+
+  select players.id
+  into selected_player_id
+  from players
+  where lower(players.name) = lower(btrim(p_player_name))
+  order by created_at desc
+  limit 1;
+
+  if selected_player_id is null then
+    insert into players (name, phone)
+    values (btrim(p_player_name), nullif(btrim(coalesce(p_player_phone, '')), ''))
+    returning id into selected_player_id;
+  else
+    update players
+    set phone = coalesce(nullif(btrim(coalesce(p_player_phone, '')), ''), players.phone)
+    where players.id = selected_player_id;
+  end if;
 
   insert into registrations (match_id, player_id, position, status, accepted_terms)
-  values (selected_match.id, selected_player_id, next_position, calculated_status, true)
-  returning registrations.id, registrations.match_id, registrations.position, registrations.status
-  into registration_id, result_match_id, result_position, result_status;
+  values (selected_match.id, selected_player_id, 9999, 'waitlist', true)
+  returning registrations.id into registration_id;
+
+  perform recalculate_match_registrations(selected_match.id);
+
+  select registrations.match_id, registrations.position, registrations.status
+  into result_match_id, result_position, result_status
+  from registrations
+  where registrations.id = registration_id;
 
   return next;
 end;
@@ -253,15 +344,23 @@ create or replace function public_create_cancellation(
   p_note text default null,
   p_target_match_id uuid default null
 )
-returns uuid
+returns table (
+  cancellation_id uuid,
+  previous_status text,
+  possible_debt boolean,
+  promoted_player_id uuid
+)
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
   selected_match_id uuid;
+  selected_match_date date;
+  selected_price integer;
   selected_player_id uuid;
-  cancellation_id uuid;
+  selected_registration registrations%rowtype;
+  candidate_promoted_player_id uuid;
 begin
   if length(btrim(p_player_name)) < 3 then
     raise exception 'Nombre inválido';
@@ -275,8 +374,8 @@ begin
     raise exception 'Estado inválido';
   end if;
 
-  select m.id
-  into selected_match_id
+  select m.id, m.date, m.price_per_player
+  into selected_match_id, selected_match_date, selected_price
   from matches m
   where m.status = 'open'
     and (p_target_match_id is null or m.id = p_target_match_id)
@@ -300,29 +399,82 @@ begin
     returning id into selected_player_id;
   end if;
 
+  select *
+  into selected_registration
+  from registrations
+  where registrations.match_id = selected_match_id
+    and registrations.player_id = selected_player_id
+    and registrations.status <> 'cancelled'
+  order by registrations.created_at desc
+  limit 1;
+
+  if selected_registration.id is not null and selected_registration.status = 'confirmed' then
+    select registrations.player_id
+    into candidate_promoted_player_id
+    from registrations
+    where registrations.match_id = selected_match_id
+      and registrations.status = 'waitlist'
+      and registrations.id <> selected_registration.id
+    order by registrations.created_at asc, registrations.id asc
+    limit 1;
+  end if;
+
   insert into cancellations (
     match_id,
     player_id,
     action_type,
     declared_status,
+    previous_status,
     has_replacement,
     replacement_name,
     note,
-    admin_decision
+    admin_decision,
+    possible_debt,
+    promoted_player_id
   )
   values (
     selected_match_id,
     selected_player_id,
     p_action_type,
     p_declared_status,
+    selected_registration.status,
     coalesce(p_has_replacement, false),
     nullif(btrim(coalesce(p_replacement_name, '')), ''),
     nullif(btrim(coalesce(p_note, '')), ''),
-    'pending'
+    'pending',
+    coalesce(
+      selected_registration.status = 'confirmed'
+      and selected_match_date = current_date
+      and not coalesce(p_has_replacement, false),
+      false
+    ),
+    candidate_promoted_player_id
   )
-  returning id into cancellation_id;
+  returning
+    cancellations.id,
+    cancellations.previous_status,
+    cancellations.possible_debt,
+    cancellations.promoted_player_id
+  into cancellation_id, previous_status, possible_debt, promoted_player_id;
 
-  return cancellation_id;
+  if selected_registration.id is not null then
+    update registrations
+    set status = 'cancelled'
+    where registrations.id = selected_registration.id;
+
+    perform recalculate_match_registrations(selected_match_id);
+  end if;
+
+  if possible_debt then
+    insert into payments (match_id, player_id, amount, status, reason)
+    values (selected_match_id, selected_player_id, selected_price, 'pending', 'Cancelación el mismo lunes sin reemplazo confirmado')
+    on conflict (match_id, player_id) do update
+    set status = excluded.status,
+        amount = excluded.amount,
+        reason = excluded.reason;
+  end if;
+
+  return next;
 end;
 $$;
 

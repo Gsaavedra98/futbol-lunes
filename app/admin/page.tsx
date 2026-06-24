@@ -114,10 +114,13 @@ export default function AdminPage() {
     .filter((cancellation) => cancellation.match_id === match.id)
     .map((cancellation) => ({
       ...cancellation,
-      player: data.players.find((player) => player.id === cancellation.player_id)!
+      player: data.players.find((player) => player.id === cancellation.player_id)!,
+      promoted_player: cancellation.promoted_player_id
+        ? data.players.find((player) => player.id === cancellation.promoted_player_id) ?? null
+        : null
     }))
     .filter((cancellation) => Boolean(cancellation.player));
-  const summary = generateWhatsAppSummary(match, registrations, includeDebts, data.payments, data.players);
+  const summary = generateWhatsAppSummary(match, registrations, includeDebts, data.payments, data.players, cancellations);
 
   return (
     <div className="grid gap-5">
@@ -282,9 +285,13 @@ function CancellationsAdmin({
                 </div>
               </div>
               <p className="text-sm font-semibold text-ink/70">
-                Acción: {cancellation.action_type} · Declaró: {cancellation.declared_status}
+                Acción: {cancellation.action_type} · Estado anterior: {cancellation.previous_status ?? cancellation.declared_status}
               </p>
+              {cancellation.possible_debt ? <p className="text-sm font-bold text-clay">Posible deuda por cancelación el lunes.</p> : null}
               {cancellation.replacement_name ? <p className="text-sm font-semibold text-ink/70">Reemplazo: {cancellation.replacement_name}</p> : null}
+              {cancellation.promoted_player ? (
+                <p className="text-sm font-semibold text-pitch">{cancellation.promoted_player.name} subió desde lista de espera.</p>
+              ) : null}
               {cancellation.note ? <p className="rounded-lg bg-line/70 p-3 text-sm font-semibold text-ink/70">{cancellation.note}</p> : null}
               <select className="field" value={cancellation.admin_decision} onChange={(event) => decide(cancellation.id, event.target.value as AdminDecision)}>
                 <option value="pending">Pendiente</option>

@@ -27,8 +27,8 @@ export default function RegisterPage() {
       setStatus(result.status);
       setMessage(
         result.status === "confirmed"
-          ? "Quedaste confirmado para el partido."
-          : "Quedaste en lista de espera. Te avisarán si se libera o amplía el cupo."
+          ? "Estás confirmado para el partido. Recuerda que si cancelas el lunes sin reemplazo, debes pagar tu cupo."
+          : "Quedaste en lista de espera. Si alguien cancela, podrías subir automáticamente a confirmado."
       );
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "No se pudo guardar la inscripción.");

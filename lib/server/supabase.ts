@@ -2,8 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 
 export const missingDatabaseMessage = "La base de datos no está configurada";
 
+function publicSupabaseKey() {
+  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+}
+
 export function hasPublicSupabaseConfig() {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && publicSupabaseKey());
 }
 
 export function hasAdminSupabaseConfig() {
@@ -17,7 +21,7 @@ export function createPublicSupabaseClient() {
 
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string,
+    publicSupabaseKey() as string,
     {
       auth: { persistSession: false }
     }

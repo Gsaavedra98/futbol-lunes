@@ -15,11 +15,12 @@ import type {
   RegistrationStatus
 } from "./types";
 import {
+  activeRegistrationsForMatch,
   findOrCreatePlayer,
   normalizeName,
   possibleDebt,
+  recalculateMatchRegistrations,
   registrationsForMatch,
-  statusForPosition
 } from "./utils";
 
 const databaseNotConfigured = "La base de datos no está configurada";
@@ -95,25 +96,35 @@ export async function registerPlayer(input: { name: string; phone?: string; acce
       throw new Error("Debes aceptar la regla de cancelación para anotarte.");
     }
 
+    const alreadyRegistered = registrationsForMatch(data, match.id).find(
+      (registration) =>
+        registration.status !== "cancelled" &&
+        registration.player.name.toLowerCase() === normalizedName.toLowerCase()
+    );
+
+    if (alreadyRegistered) {
+      throw new Error("Ya tienes una inscripción activa para este partido.");
+    }
+
     const playerResult = findOrCreatePlayer(data.players, normalizedName, input.phone);
     const nextPlayers = playerResult.isNew
       ? [...data.players, playerResult.player]
       : data.players.map((player) => (player.id === playerResult.player.id ? playerResult.player : player));
-    const position = registrationsForMatch(data, match.id).filter((registration) => registration.status !== "cancelled").length + 1;
-    const status = statusForPosition(position, match.active_capacity);
     const now = new Date().toISOString();
     const registration: Registration = {
       id: crypto.randomUUID(),
       match_id: match.id,
       player_id: playerResult.player.id,
-      position,
-      status,
+      position: 9999,
+      status: "waitlist",
       accepted_terms: true,
       created_at: now
     };
+    const registrations = recalculateMatchRegistrations([...data.registrations, registration], match);
+    const savedRegistration = registrations.find((item) => item.id === registration.id) ?? registration;
 
-    saveDemoData({ ...data, players: nextPlayers, registrations: [...data.registrations, registration] });
-    return { status, registration: { ...registration, player: playerResult.player } };
+    saveDemoData({ ...data, players: nextPlayers, registrations });
+    return { status: savedRegistration.status, registration: { ...savedRegistration, player: playerResult.player } };
   }
 }
 
@@ -126,7 +137,7 @@ export async function cancelRegistration(input: {
   note?: string;
 }) {
   try {
-    return await readJson<{ possibleDebt: boolean }>(
+    return await readJson<{ possibleDebt: boolean; previousStatus?: RegistrationStatus | null; promotedPlayerId?: string | null }>(
       await fetch("/api/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,15 +172,23 @@ export async function cancelRegistration(input: {
       admin_decision: "pending",
       created_at: now
     };
+    const previousStatus = registration?.status;
     const debt = possibleDebt(match, registration, cancellation);
+    const waitlistBefore = activeRegistrationsForMatch(data, match).find((item) => item.status === "waitlist");
+    const registrations = registration
+      ? recalculateMatchRegistrations(
+          data.registrations.map((item) => (item.id === registration.id ? { ...item, status: "cancelled" } : item)),
+          match
+        )
+      : data.registrations;
+    const promotedPlayerId =
+      previousStatus === "confirmed" && waitlistBefore ? waitlistBefore.player_id : null;
 
     saveDemoData({
       ...data,
       players: playerResult.isNew ? [...data.players, playerResult.player] : data.players,
-      registrations: registration
-        ? data.registrations.map((item) => (item.id === registration.id ? { ...item, status: "cancelled" } : item))
-        : data.registrations,
-      cancellations: [cancellation, ...data.cancellations],
+      registrations,
+      cancellations: [{ ...cancellation, previous_status: previousStatus, possible_debt: debt, promoted_player_id: promotedPlayerId }, ...data.cancellations],
       payments: debt
         ? [
             {
@@ -186,7 +205,7 @@ export async function cancelRegistration(input: {
         : data.payments
     });
 
-    return { possibleDebt: debt };
+    return { possibleDebt: debt, previousStatus, promotedPlayerId };
   }
 }
 
@@ -217,14 +236,11 @@ export async function updateMatch(input: {
     const current = getCurrentMatch(data);
     const now = new Date().toISOString();
     const match: Match = current ? { ...current, ...input } : { id: crypto.randomUUID(), created_at: now, ...input };
+    const registrations = recalculateMatchRegistrations(data.registrations, match);
     saveDemoData({
       ...data,
       matches: current ? data.matches.map((item) => (item.id === current.id ? match : item)) : [match, ...data.matches],
-      registrations: data.registrations.map((registration) =>
-        registration.match_id === match.id && registration.status !== "cancelled" && registration.status !== "replacement"
-          ? { ...registration, status: statusForPosition(registration.position, match.active_capacity) }
-          : registration
-      )
+      registrations
     });
   }
 }
@@ -235,11 +251,14 @@ export async function updateRegistrationStatus(registrationId: string, status: R
   } catch (error) {
     if (!canFallbackToDemo(error)) throw error;
     const data = loadDemoData();
+    const nextRegistrations = data.registrations.map((registration) =>
+      registration.id === registrationId ? { ...registration, status } : registration
+    );
+    const changed = nextRegistrations.find((registration) => registration.id === registrationId);
+    const match = changed ? data.matches.find((item) => item.id === changed.match_id) : null;
     saveDemoData({
       ...data,
-      registrations: data.registrations.map((registration) =>
-        registration.id === registrationId ? { ...registration, status } : registration
-      )
+      registrations: match ? recalculateMatchRegistrations(nextRegistrations, match) : nextRegistrations
     });
   }
 }
@@ -305,7 +324,7 @@ export async function updatePayment(matchId: string, playerId: string, amount: n
 }
 
 export function getPublicLists(data: AppData, match: Match) {
-  const active = registrationsForMatch(data, match.id).filter((registration) => registration.status !== "cancelled");
+  const active = activeRegistrationsForMatch(data, match).filter((registration) => registration.status !== "cancelled");
   return {
     confirmed: active.filter((registration) => registration.status === "confirmed"),
     waitlist: active.filter((registration) => registration.status === "waitlist"),

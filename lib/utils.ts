@@ -1,6 +1,7 @@
 import type {
   AppData,
   Cancellation,
+  CancellationWithPlayer,
   Match,
   Player,
   Registration,
@@ -48,6 +49,27 @@ export function statusForPosition(position: number, capacity: Match["active_capa
   return position <= capacity ? "confirmed" : "waitlist";
 }
 
+export function recalculateMatchRegistrations(
+  registrations: Registration[],
+  match: Pick<Match, "id" | "active_capacity">
+) {
+  let activePosition = 0;
+  const active = registrations
+    .filter((registration) => registration.match_id === match.id && registration.status !== "cancelled")
+    .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+    .map((registration) => {
+      activePosition += 1;
+      return {
+        ...registration,
+        position: activePosition,
+        status: statusForPosition(activePosition, match.active_capacity)
+      };
+    });
+  const activeById = new Map(active.map((registration) => [registration.id, registration]));
+
+  return registrations.map((registration) => activeById.get(registration.id) ?? registration);
+}
+
 export function registrationsForMatch(data: AppData, matchId: string): RegistrationWithPlayer[] {
   return data.registrations
     .filter((registration) => registration.match_id === matchId)
@@ -56,17 +78,12 @@ export function registrationsForMatch(data: AppData, matchId: string): Registrat
       player: data.players.find((player) => player.id === registration.player_id)!
     }))
     .filter((registration) => Boolean(registration.player))
-    .sort((a, b) => a.position - b.position);
+    .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
 }
 
 export function activeRegistrationsForMatch(data: AppData, match: Match) {
-  return registrationsForMatch(data, match.id).map((registration) => ({
-    ...registration,
-    status:
-      registration.status === "cancelled" || registration.status === "replacement"
-        ? registration.status
-        : statusForPosition(registration.position, match.active_capacity)
-  }));
+  const recalculated = recalculateMatchRegistrations(data.registrations, match);
+  return registrationsForMatch({ ...data, registrations: recalculated }, match.id);
 }
 
 export function findOrCreatePlayer(players: Player[], name: string, phone?: string) {
@@ -105,18 +122,25 @@ export function generateWhatsAppSummary(
   registrations: RegistrationWithPlayer[],
   includeDebts: boolean,
   payments: AppData["payments"],
-  players: AppData["players"]
+  players: AppData["players"],
+  cancellations: CancellationWithPlayer[] = []
 ) {
-  const active = registrations.map((registration) => ({
-    ...registration,
-    status:
-      registration.status === "cancelled" || registration.status === "replacement"
-        ? registration.status
-        : statusForPosition(registration.position, match.active_capacity)
-  }));
+  const active = recalculateMatchRegistrations(registrations, match).filter(
+    (registration) => registration.status !== "cancelled"
+  ) as RegistrationWithPlayer[];
   const confirmed = active.filter((registration) => registration.status === "confirmed");
   const waitlist = active.filter((registration) => registration.status === "waitlist");
   const debts = payments.filter((payment) => payment.match_id === match.id && payment.status === "pending");
+  const cancellationLines = cancellations
+    .filter((cancellation) => cancellation.match_id === match.id)
+    .slice(0, 5)
+    .map((cancellation) => {
+      const promoted = cancellation.promoted_player?.name
+        ? ` ${cancellation.promoted_player.name} sube desde lista de espera.`
+        : "";
+      const late = cancellation.possible_debt ? " Canceló el lunes." : "";
+      return `- ${cancellation.player.name} canceló.${late}${promoted}`;
+    });
 
   const debtLines = debts.map((payment) => {
     const player = players.find((item) => item.id === payment.player_id);
@@ -136,6 +160,7 @@ export function generateWhatsAppSummary(
     waitlist.length ? waitlist.map((registration, index) => `${index + 1}. ${registration.player.name}`).join("\n") : "Sin lista de espera",
     "",
     "Regla: si estás confirmado y cancelas el mismo lunes sin reemplazo, debes pagar tu cupo.",
+    cancellationLines.length ? `\nNovedades:\n${cancellationLines.join("\n")}` : "",
     includeDebts && debtLines.length ? `\nDeudas pendientes:\n${debtLines.join("\n")}` : ""
   ]
     .filter(Boolean)

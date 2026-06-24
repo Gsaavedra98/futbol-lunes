@@ -13,7 +13,7 @@ import type {
   Registration,
   RegistrationStatus
 } from "@/lib/types";
-import { isSameMonday, normalizeName, statusForPosition } from "@/lib/utils";
+import { normalizeName } from "@/lib/utils";
 import {
   createAdminSupabaseClient,
   createPublicSupabaseClient,
@@ -27,6 +27,20 @@ type PublicRegistrationRow = {
   status: RegistrationStatus;
   created_at: string;
   player_name: string;
+};
+
+type RegistrationRpcRow = {
+  registration_id: string;
+  result_match_id: string;
+  result_position: number;
+  result_status: RegistrationStatus;
+};
+
+type CancellationRpcRow = {
+  cancellation_id: string;
+  previous_status: RegistrationStatus | null;
+  possible_debt: boolean;
+  promoted_player_id: string | null;
 };
 
 export async function getPublicDataFromSupabase() {
@@ -128,15 +142,15 @@ export async function createRegistrationInSupabase(input: {
     throw new Error(error.message);
   }
 
-  const row = Array.isArray(data) ? data[0] : data;
+  const row = (Array.isArray(data) ? data[0] : data) as RegistrationRpcRow;
   return {
-    status: row.result_status as RegistrationStatus,
+    status: row.result_status,
     registration: {
-      id: row.registration_id as string,
-      match_id: row.result_match_id as string,
-      player_id: row.registration_id as string,
-      position: row.result_position as number,
-      status: row.result_status as RegistrationStatus,
+      id: row.registration_id,
+      match_id: row.result_match_id,
+      player_id: row.registration_id,
+      position: row.result_position,
+      status: row.result_status,
       accepted_terms: true,
       created_at: new Date().toISOString(),
       player: { id: row.registration_id as string, name, phone: null, created_at: new Date().toISOString() }
@@ -153,8 +167,7 @@ export async function createCancellationInSupabase(input: {
   note?: string;
 }) {
   const publicClient = createPublicSupabaseClient();
-  const adminClient = createAdminSupabaseClient();
-  if (!publicClient || !adminClient) {
+  if (!publicClient) {
     throw new Error(missingDatabaseMessage);
   }
 
@@ -163,7 +176,7 @@ export async function createCancellationInSupabase(input: {
     throw new Error("Escribe tu nombre completo.");
   }
 
-  const { data: cancellationId, error } = await publicClient.rpc("public_create_cancellation", {
+  const { data, error } = await publicClient.rpc("public_create_cancellation", {
     p_player_name: name,
     p_action_type: input.actionType,
     p_declared_status: input.declaredStatus,
@@ -176,49 +189,13 @@ export async function createCancellationInSupabase(input: {
     throw new Error(error.message);
   }
 
-  const { data: cancellation } = await adminClient
-    .from("cancellations")
-    .select("*")
-    .eq("id", cancellationId)
-    .single<Cancellation>();
-  const { data: match } = await adminClient
-    .from("matches")
-    .select("*")
-    .eq("id", cancellation?.match_id)
-    .single<Match>();
-  const { data: registration } = await adminClient
-    .from("registrations")
-    .select("*")
-    .eq("match_id", cancellation?.match_id)
-    .eq("player_id", cancellation?.player_id)
-    .neq("status", "cancelled")
-    .maybeSingle<Registration>();
+  const row = (Array.isArray(data) ? data[0] : data) as CancellationRpcRow;
 
-  const possibleDebt =
-    Boolean(match && cancellation && registration?.status === "confirmed") &&
-    isSameMonday(match!.date, cancellation!.created_at) &&
-    !cancellation!.has_replacement;
-
-  if (possibleDebt && match && cancellation) {
-    await adminClient
-      .from("payments")
-      .upsert(
-        {
-          match_id: match.id,
-          player_id: cancellation.player_id,
-          amount: match.price_per_player,
-          status: "pending",
-          reason: "Cancelación el mismo lunes sin reemplazo confirmado"
-        },
-        { onConflict: "match_id,player_id" }
-      );
-  }
-
-  if (registration) {
-    await adminClient.from("registrations").update({ status: "cancelled" }).eq("id", registration.id);
-  }
-
-  return { possibleDebt };
+  return {
+    possibleDebt: row.possible_debt,
+    previousStatus: row.previous_status,
+    promotedPlayerId: row.promoted_player_id
+  };
 }
 
 export async function updateMatchInSupabase(input: {
@@ -240,27 +217,20 @@ export async function updateMatchInSupabase(input: {
     throw new Error(error.message);
   }
 
-  const { data: registrations } = await supabase
-    .from("registrations")
-    .select("*")
-    .eq("match_id", match.id)
-    .not("status", "in", "(cancelled,replacement)");
-
-  await Promise.all(
-    ((registrations ?? []) as Registration[]).map((registration) =>
-      supabase
-        .from("registrations")
-        .update({ status: statusForPosition(registration.position, match.active_capacity) })
-        .eq("id", registration.id)
-    )
-  );
+  await recalculateMatchRegistrationsInSupabase(match.id);
 }
 
 export async function updateRegistrationStatusInSupabase(registrationId: string, status: RegistrationStatus) {
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error(missingDatabaseMessage);
-  const { error } = await supabase.from("registrations").update({ status }).eq("id", registrationId);
+  const { data: registration, error } = await supabase
+    .from("registrations")
+    .update({ status })
+    .eq("id", registrationId)
+    .select("match_id")
+    .single<Pick<Registration, "match_id">>();
   if (error) throw new Error(error.message);
+  await recalculateMatchRegistrationsInSupabase(registration.match_id);
 }
 
 export async function updateCancellationDecisionInSupabase(cancellationId: string, decision: AdminDecision) {
@@ -294,5 +264,12 @@ export async function upsertPaymentInSupabase(matchId: string, playerId: string,
       },
       { onConflict: "match_id,player_id" }
     );
+  if (error) throw new Error(error.message);
+}
+
+async function recalculateMatchRegistrationsInSupabase(matchId: string) {
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error(missingDatabaseMessage);
+  const { error } = await supabase.rpc("recalculate_match_registrations", { p_match_id: matchId });
   if (error) throw new Error(error.message);
 }

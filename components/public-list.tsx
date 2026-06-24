@@ -5,12 +5,14 @@ export function PublicList({
   title,
   registrations,
   empty,
-  status
+  status,
+  startAt = 1
 }: {
   title: string;
   registrations: RegistrationWithPlayer[];
   empty: string;
   status: "confirmed" | "waitlist";
+  startAt?: number;
 }) {
   return (
     <section className="card">
@@ -23,7 +25,7 @@ export function PublicList({
           registrations.map((registration, index) => (
             <div key={registration.id} className="flex items-center gap-3 rounded-lg border border-ink/10 bg-white p-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-line font-black text-pitch">
-                {index + 1}
+                {startAt + index}
               </span>
               <span className="font-bold text-ink">{registration.player.name}</span>
             </div>

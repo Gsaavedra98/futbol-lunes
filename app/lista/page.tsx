@@ -46,7 +46,13 @@ export default function ListPage() {
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <PublicList title="Confirmados" registrations={confirmed} empty="Todavía no hay confirmados." status="confirmed" />
-        <PublicList title="Lista de espera" registrations={waitlist} empty="No hay jugadores en espera." status="waitlist" />
+        <PublicList
+          title="Lista de espera"
+          registrations={waitlist}
+          empty="No hay jugadores en espera."
+          status="waitlist"
+          startAt={confirmed.length + 1}
+        />
       </div>
     </div>
   );

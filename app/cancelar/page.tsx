@@ -27,7 +27,11 @@ export default function CancelPage() {
       setMessage(
         result.possibleDebt
           ? "Cancelación recibida. Como parece ser lunes y estabas confirmado sin reemplazo, queda como posible deuda para revisión del administrador."
-          : "Cancelación recibida. El administrador revisará el caso y ajustará la lista."
+          : result.previousStatus === "waitlist"
+            ? "Tu cancelación fue registrada. Saliste de la lista de espera."
+            : result.previousStatus === "confirmed"
+              ? "Tu cancelación fue registrada. No generas deuda."
+              : "Cancelación recibida. El administrador revisará el caso y ajustará la lista."
       );
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "No se pudo guardar la cancelación.");
