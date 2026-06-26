@@ -43,6 +43,41 @@ type CancellationRpcRow = {
   promoted_player_id: string | null;
 };
 
+export async function getPlayerSuggestionsFromSupabase() {
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) {
+    throw new Error(missingDatabaseMessage);
+  }
+
+  const { data, error } = await supabase
+    .from("registrations")
+    .select("created_at, players(name, phone)")
+    .neq("status", "cancelled")
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const suggestions = new Map<string, { name: string; phone?: string }>();
+
+  for (const row of data ?? []) {
+    const player = Array.isArray(row.players) ? row.players[0] : row.players;
+    const name = player?.name?.trim();
+    if (!name || suggestions.has(name.toLowerCase())) {
+      continue;
+    }
+
+    suggestions.set(name.toLowerCase(), {
+      name,
+      phone: player.phone?.trim() || undefined
+    });
+  }
+
+  return Array.from(suggestions.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
 export async function getPublicDataFromSupabase() {
   const supabase = createPublicSupabaseClient();
   if (!supabase) {

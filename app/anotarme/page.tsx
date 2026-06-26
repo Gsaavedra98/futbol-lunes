@@ -7,8 +7,8 @@ import { StatusPill } from "@/components/status-pill";
 import { registerPlayer } from "@/lib/store";
 import type { RegistrationStatus } from "@/lib/types";
 import {
-  getRememberedPlayers,
-  phoneForRememberedPlayer,
+  getPlayerSuggestions,
+  phoneForPlayerSuggestion,
   rememberPlayer,
   type RememberedPlayer
 } from "@/lib/name-memory";
@@ -24,13 +24,13 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setRememberedPlayers(getRememberedPlayers());
+    getPlayerSuggestions().then(setRememberedPlayers);
   }, []);
 
   function updateName(nextName: string) {
     setName(nextName);
-    const rememberedPhone = phoneForRememberedPlayer(nextName);
-    if (rememberedPhone && !phone) {
+    const rememberedPhone = phoneForPlayerSuggestion(nextName, rememberedPlayers);
+    if (rememberedPhone) {
       setPhone(rememberedPhone);
     }
   }
@@ -44,7 +44,7 @@ export default function RegisterPage() {
     try {
       const result = await registerPlayer({ name, phone, acceptedTerms });
       rememberPlayer(name, phone);
-      setRememberedPlayers(getRememberedPlayers());
+      setRememberedPlayers(await getPlayerSuggestions());
       setStatus(result.status);
       setMessage(
         result.status === "confirmed"
@@ -76,7 +76,9 @@ export default function RegisterPage() {
             />
             <datalist id="remembered-player-names">
               {rememberedPlayers.map((player) => (
-                <option key={player.name} value={player.name} />
+                <option key={player.name} value={player.name}>
+                  {player.phone ? `WhatsApp ${player.phone}` : ""}
+                </option>
               ))}
             </datalist>
           </label>

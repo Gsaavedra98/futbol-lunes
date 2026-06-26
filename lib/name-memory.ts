@@ -45,3 +45,35 @@ export function phoneForRememberedPlayer(name: string) {
   const normalized = normalizeName(name).toLowerCase();
   return getRememberedPlayers().find((player) => player.name.toLowerCase() === normalized)?.phone;
 }
+
+export async function getPlayerSuggestions() {
+  const localPlayers = getRememberedPlayers();
+
+  try {
+    const response = await fetch("/api/player-suggestions", { cache: "no-store" });
+    if (!response.ok) {
+      return localPlayers;
+    }
+
+    const payload = (await response.json()) as { players?: RememberedPlayer[] };
+    const merged = new Map<string, RememberedPlayer>();
+
+    for (const player of [...(payload.players ?? []), ...localPlayers]) {
+      const normalized = normalizeName(player.name);
+      if (!normalized) continue;
+      merged.set(normalized.toLowerCase(), {
+        name: normalized,
+        phone: player.phone?.trim() || undefined
+      });
+    }
+
+    return Array.from(merged.values());
+  } catch {
+    return localPlayers;
+  }
+}
+
+export function phoneForPlayerSuggestion(name: string, players: RememberedPlayer[]) {
+  const normalized = normalizeName(name).toLowerCase();
+  return players.find((player) => player.name.toLowerCase() === normalized)?.phone;
+}

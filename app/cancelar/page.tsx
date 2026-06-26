@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Send } from "lucide-react";
 import { cancelRegistration } from "@/lib/store";
 import type { CancellationAction, DeclaredStatus } from "@/lib/types";
-import { getRememberedPlayers, rememberPlayer, type RememberedPlayer } from "@/lib/name-memory";
+import { getPlayerSuggestions, rememberPlayer, type RememberedPlayer } from "@/lib/name-memory";
 
 export default function CancelPage() {
   const [name, setName] = useState("");
@@ -19,7 +19,7 @@ export default function CancelPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setRememberedPlayers(getRememberedPlayers());
+    getPlayerSuggestions().then(setRememberedPlayers);
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -31,7 +31,7 @@ export default function CancelPage() {
     try {
       const result = await cancelRegistration({ name, actionType, declaredStatus, hasReplacement, replacementName, note });
       rememberPlayer(name);
-      setRememberedPlayers(getRememberedPlayers());
+      setRememberedPlayers(await getPlayerSuggestions());
       setMessage(
         result.possibleDebt
           ? "Cancelación recibida. Como parece ser lunes y estabas confirmado sin reemplazo, queda como posible deuda para revisión del administrador."
