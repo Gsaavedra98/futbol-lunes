@@ -6,12 +6,15 @@ import { useEffect, useState } from "react";
 import { LoadingCard } from "@/components/loading-card";
 import { MatchSummary } from "@/components/match-summary";
 import { ErrorCard } from "@/components/error-card";
-import type { AppData, Match } from "@/lib/types";
+import { PublicList } from "@/components/public-list";
+import type { AppData, Match, RegistrationWithPlayer } from "@/lib/types";
 import { getCurrentMatch, getData, getPublicLists } from "@/lib/store";
 
 export default function HomePage() {
   const [match, setMatch] = useState<Match | null>(null);
   const [counts, setCounts] = useState({ confirmed: 0, waitlist: 0, available: 0 });
+  const [confirmed, setConfirmed] = useState<RegistrationWithPlayer[]>([]);
+  const [waitlist, setWaitlist] = useState<RegistrationWithPlayer[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -21,6 +24,8 @@ export default function HomePage() {
         setMatch(current);
         if (current) {
           const lists = getPublicLists(data, current);
+          setConfirmed(lists.confirmed);
+          setWaitlist(lists.waitlist);
           setCounts({
             confirmed: lists.confirmed.length,
             waitlist: lists.waitlist.length,
@@ -50,10 +55,21 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <Action href="/anotarme" icon={<UserPlus size={22} />} title="Anotarme" />
-        <Action href="/cancelar" icon={<UserMinus size={22} />} title="Cancelar asistencia" />
-        <Action href="/lista" icon={<ListChecks size={22} />} title="Ver lista" />
+        <Action href="/anotarme" icon={<UserPlus size={22} />} title="Anotarme al partido" />
+        <Action href="/cancelar" icon={<UserMinus size={22} />} title="Cancelar mi asistencia" />
+        <Action href="/lista" icon={<ListChecks size={22} />} title="Ver lista completa" secondary />
         <Action href="/admin" icon={<ClipboardList size={22} />} title="Panel administrador" secondary />
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-2">
+        <PublicList title="Confirmados" registrations={confirmed} empty="Todavía no hay confirmados." status="confirmed" />
+        <PublicList
+          title="Lista de espera"
+          registrations={waitlist}
+          empty="No hay jugadores en espera."
+          status="waitlist"
+          startAt={confirmed.length + 1}
+        />
       </section>
     </div>
   );
