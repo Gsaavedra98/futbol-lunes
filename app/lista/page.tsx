@@ -52,6 +52,8 @@ export default function ListPage() {
           empty="No hay jugadores en espera."
           status="waitlist"
           startAt={confirmed.length + 1}
+          badgeLabel="Suplente"
+          rowBadgeLabel="Suplente"
         />
       </div>
     </div>

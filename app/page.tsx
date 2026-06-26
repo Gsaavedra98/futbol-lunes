@@ -101,6 +101,7 @@ export default function HomePage() {
           startAt={confirmed.length + 1}
           counter={`${waitlist.length} en espera`}
           badgeLabel="Suplente"
+          rowBadgeLabel="Suplente"
         />
       </section>
 
