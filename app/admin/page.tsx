@@ -1,6 +1,17 @@
 "use client";
 
-import { Clipboard, Lock, RefreshCcw, Save } from "lucide-react";
+import {
+  AlertTriangle,
+  Banknote,
+  CheckCircle2,
+  Clipboard,
+  Lock,
+  RefreshCcw,
+  Save,
+  ShieldCheck,
+  UserMinus,
+  XCircle
+} from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { LoadingCard } from "@/components/loading-card";
 import { StatusPill } from "@/components/status-pill";
@@ -136,11 +147,267 @@ export default function AdminPage() {
       </div>
 
       <MatchEditor match={match} onSaved={refresh} />
-      <RegistrationsAdmin data={data} match={match} registrations={registrations} onChanged={refresh} />
+      <AdminSummary data={data} match={match} registrations={registrations} cancellations={cancellations} />
+      <PlayerManagement data={data} match={match} registrations={registrations} onChanged={refresh} />
       <CancellationsAdmin match={match} cancellations={cancellations} onChanged={refresh} />
-      <PaymentsAdmin data={data} match={match} registrations={registrations} onChanged={refresh} />
       <WhatsAppBox summary={summary} includeDebts={includeDebts} setIncludeDebts={setIncludeDebts} />
     </div>
+  );
+}
+
+function AdminSummary({
+  data,
+  match,
+  registrations,
+  cancellations
+}: {
+  data: AppData;
+  match: Match;
+  registrations: RegistrationWithPlayer[];
+  cancellations: CancellationWithPlayer[];
+}) {
+  const confirmed = registrations.filter((registration) => registration.status === "confirmed").length;
+  const waitlist = registrations.filter((registration) => registration.status === "waitlist").length;
+  const paid = data.payments.filter((payment) => payment.match_id === match.id && payment.status === "paid").length;
+  const debts = data.payments.filter((payment) => payment.match_id === match.id && payment.status === "debt").length;
+  const pendingPayments = registrations.filter((registration) => {
+    const payment = data.payments.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
+    return registration.status !== "cancelled" && (!payment || payment.status === "pending" || payment.status === "pending_review");
+  }).length;
+  const mondayCancellations = cancellations.filter((cancellation) => isSameMonday(match.date, cancellation.created_at)).length;
+
+  return (
+    <section className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <SummaryTile label="Confirmados" value={`${confirmed}/${match.active_capacity}`} />
+      <SummaryTile label="Suplentes" value={waitlist} />
+      <SummaryTile label="Pagados" value={paid} />
+      <SummaryTile label="Pendientes" value={pendingPayments} />
+      <SummaryTile label="Deudas" value={debts} tone="danger" />
+      <SummaryTile label="Cancel. lunes" value={mondayCancellations} />
+    </section>
+  );
+}
+
+function SummaryTile({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "danger" }) {
+  return (
+    <div className={tone === "danger" ? "rounded-lg bg-clay/15 p-3 text-clay" : "rounded-lg bg-pitch p-3 text-white"}>
+      <span className="block text-2xl font-black leading-none">{value}</span>
+      <span className={tone === "danger" ? "mt-1 block text-xs font-bold text-clay/80" : "mt-1 block text-xs font-bold text-white/75"}>{label}</span>
+    </div>
+  );
+}
+
+type PlayerFilter = "all" | "confirmed" | "waitlist" | "cancelled" | "payment_pending" | "debt";
+
+const playerFilters: Array<{ id: PlayerFilter; label: string }> = [
+  { id: "all", label: "Todos" },
+  { id: "confirmed", label: "Confirmados" },
+  { id: "waitlist", label: "Suplentes" },
+  { id: "cancelled", label: "Cancelados" },
+  { id: "payment_pending", label: "Pend. pago" },
+  { id: "debt", label: "Deudores" }
+];
+
+function PlayerManagement({
+  data,
+  match,
+  registrations,
+  onChanged
+}: {
+  data: AppData;
+  match: Match;
+  registrations: RegistrationWithPlayer[];
+  onChanged: () => void;
+}) {
+  const [filter, setFilter] = useState<PlayerFilter>("all");
+  const [busyAction, setBusyAction] = useState<string>("");
+  const [feedback, setFeedback] = useState("");
+
+  const filtered = useMemo(
+    () =>
+      registrations.filter((registration) => {
+        const payment = data.payments.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
+        if (filter === "all") return true;
+        if (filter === "payment_pending") return registration.status !== "cancelled" && (!payment || payment.status === "pending" || payment.status === "pending_review");
+        if (filter === "debt") return payment?.status === "debt";
+        return registration.status === filter;
+      }),
+    [data.payments, filter, match.id, registrations]
+  );
+
+  async function runAction(key: string, message: string, action: () => Promise<void>) {
+    setBusyAction(key);
+    setFeedback("");
+    try {
+      await action();
+      setFeedback(message);
+      await onChanged();
+      window.setTimeout(() => setFeedback(""), 1800);
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  return (
+    <section className="card">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-xl font-black text-ink">Gestión de jugadores</h2>
+        <p className="text-sm font-semibold text-ink/60">
+          {formatDate(match.date)}
+          <span className="mx-1">·</span>
+          {match.time}
+          <span className="mx-1">·</span>
+          {match.location}
+        </p>
+      </div>
+
+      <div className="-mx-1 mt-4 flex gap-2 overflow-x-auto px-1 pb-1">
+        {playerFilters.map((item) => (
+          <button
+            key={item.id}
+            className={filter === item.id ? "status-pill bg-pitch text-white" : "status-pill bg-line text-ink"}
+            onClick={() => setFilter(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {feedback ? <p className="mt-3 rounded-lg bg-mint/50 p-3 text-sm font-bold text-pitch">{feedback}</p> : null}
+
+      <div className="mt-4 grid gap-3">
+        {filtered.map((registration) => {
+          const attendance = data.attendance.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
+          const payment = data.payments.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
+          const attendanceLabel = attendance ? (attendance.attended ? "Asistió" : "No asistió") : "Pendiente";
+          const attendanceTone = attendance ? (attendance.attended ? "bg-mint text-pitch" : "bg-clay/15 text-clay") : "bg-sun/25 text-ink";
+          const paymentStatus = payment?.status ?? "pending";
+
+          return (
+            <article key={registration.id} className="grid min-w-0 gap-3 rounded-lg border border-ink/10 bg-white p-3">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-black text-ink">{registration.player.name}</p>
+                  <p className="text-sm font-bold text-ink/55">
+                    #{registration.position} · {registration.status === "confirmed" ? "Confirmado" : registration.status === "waitlist" ? "Suplente" : registration.status === "cancelled" ? "Cancelado" : "Reemplazo"}
+                  </p>
+                </div>
+                <StatusPill status={registration.status === "waitlist" ? "waitlist" : registration.status} />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <span className={`status-pill ${attendanceTone}`}>Asistencia: {attendanceLabel}</span>
+                <StatusPill status={paymentStatus} />
+                {payment?.reported_amount ? <span className="status-pill bg-line text-ink">Reportó {formatCurrency(payment.reported_amount)}</span> : null}
+              </div>
+
+              {payment?.method || payment?.reference ? (
+                <div className="rounded-lg bg-line/70 p-3 text-sm font-semibold text-ink/70">
+                  {payment.method ? <p>Método: {payment.method}</p> : null}
+                  {payment.reference ? <p>Referencia: {payment.reference}</p> : null}
+                  {payment.reported_at ? <p>Reporte: {new Date(payment.reported_at).toLocaleString("es-CO")}</p> : null}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <ActionChip
+                  icon={<CheckCircle2 size={16} />}
+                  label="Asistió"
+                  loading={busyAction === `${registration.id}-attended`}
+                  onClick={() => runAction(`${registration.id}-attended`, "Asistencia actualizada", () => upsertAttendance(match.id, registration.player_id, true))}
+                />
+                <ActionChip
+                  icon={<XCircle size={16} />}
+                  label="No asistió"
+                  loading={busyAction === `${registration.id}-missed`}
+                  onClick={() => runAction(`${registration.id}-missed`, "Asistencia actualizada", () => upsertAttendance(match.id, registration.player_id, false))}
+                />
+                <ActionChip
+                  icon={<Banknote size={16} />}
+                  label="Pagó"
+                  loading={busyAction === `${registration.id}-paid`}
+                  onClick={() => runAction(`${registration.id}-paid`, "Pago marcado como pagado", () => updatePayment(match.id, registration.player_id, match.price_per_player, "paid"))}
+                />
+                <ActionChip
+                  icon={<AlertTriangle size={16} />}
+                  label="Debe"
+                  loading={busyAction === `${registration.id}-debt`}
+                  onClick={() => runAction(`${registration.id}-debt`, "Jugador marcado como deuda", () => updatePayment(match.id, registration.player_id, match.price_per_player, "debt"))}
+                />
+                <ActionChip
+                  icon={<ShieldCheck size={16} />}
+                  label="Exonerar"
+                  loading={busyAction === `${registration.id}-waived`}
+                  onClick={() => runAction(`${registration.id}-waived`, "Pago exonerado", () => updatePayment(match.id, registration.player_id, match.price_per_player, "waived"))}
+                />
+                <ActionChip
+                  icon={<UserMinus size={16} />}
+                  label="Cancelar"
+                  loading={busyAction === `${registration.id}-cancelled`}
+                  onClick={() => runAction(`${registration.id}-cancelled`, "Inscripción cancelada", () => updateRegistrationStatus(registration.id, "cancelled"))}
+                />
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <select
+                  className="field py-2"
+                  value={registration.status}
+                  onChange={(event) =>
+                    runAction(`${registration.id}-status`, "Estado de lista actualizado", () =>
+                      updateRegistrationStatus(registration.id, event.target.value as RegistrationStatus)
+                    )
+                  }
+                >
+                  <option value="confirmed">Confirmado</option>
+                  <option value="waitlist">Suplente</option>
+                  <option value="cancelled">Cancelado</option>
+                  <option value="replacement">Reemplazo</option>
+                </select>
+                <select
+                  className="field py-2"
+                  value={paymentStatus}
+                  onChange={(event) =>
+                    runAction(`${registration.id}-payment`, "Estado de pago actualizado", () =>
+                      updatePayment(match.id, registration.player_id, match.price_per_player, event.target.value as PaymentStatus)
+                    )
+                  }
+                >
+                  <option value="pending">Pendiente</option>
+                  <option value="pending_review">Por revisar</option>
+                  <option value="paid">Pagado</option>
+                  <option value="rejected">Rechazado</option>
+                  <option value="debt">Deuda</option>
+                  <option value="waived">Exonerado</option>
+                </select>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ActionChip({
+  icon,
+  label,
+  loading,
+  onClick
+}: {
+  icon: React.ReactNode;
+  label: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-ink/10 bg-line px-3 py-2 text-sm font-black text-ink transition active:scale-[0.99] disabled:opacity-60"
+      disabled={loading}
+      onClick={onClick}
+    >
+      {icon}
+      {loading ? "..." : label}
+    </button>
   );
 }
 
@@ -239,45 +506,6 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
   );
 }
 
-function RegistrationsAdmin({
-  registrations,
-  onChanged
-}: {
-  data: AppData;
-  match: Match;
-  registrations: RegistrationWithPlayer[];
-  onChanged: () => void;
-}) {
-  async function changeStatus(id: string, status: RegistrationStatus) {
-    await updateRegistrationStatus(id, status);
-    onChanged();
-  }
-
-  return (
-    <section className="card">
-      <h2 className="text-xl font-black text-ink">Inscritos</h2>
-      <div className="mt-4 grid gap-3">
-        {registrations.map((registration) => (
-          <div key={registration.id} className="grid gap-3 rounded-lg border border-ink/10 p-3 sm:grid-cols-[64px_1fr_160px_180px] sm:items-center">
-            <span className="font-black text-pitch">#{registration.position}</span>
-            <div>
-              <p className="font-black text-ink">{registration.player.name}</p>
-              <p className="text-sm font-semibold text-ink/55">{new Date(registration.created_at).toLocaleString("es-CO")}</p>
-            </div>
-            <StatusPill status={registration.status === "confirmed" ? "confirmed" : registration.status === "waitlist" ? "waitlist" : registration.status} />
-            <select className="field py-2" value={registration.status} onChange={(event) => changeStatus(registration.id, event.target.value as RegistrationStatus)}>
-              <option value="confirmed">Confirmado</option>
-              <option value="waitlist">Lista de espera</option>
-              <option value="cancelled">Cancelado</option>
-              <option value="replacement">Reemplazo</option>
-            </select>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function CancellationsAdmin({
   match,
   cancellations,
@@ -329,88 +557,6 @@ function CancellationsAdmin({
         ) : (
           <p className="rounded-lg bg-line/70 p-4 text-sm font-semibold text-ink/65">No hay cancelaciones.</p>
         )}
-      </div>
-    </section>
-  );
-}
-
-function PaymentsAdmin({
-  data,
-  match,
-  registrations,
-  onChanged
-}: {
-  data: AppData;
-  match: Match;
-  registrations: RegistrationWithPlayer[];
-  onChanged: () => void;
-}) {
-  const activeRegistrations = useMemo(
-    () => registrations.filter((registration) => registration.status === "confirmed" || registration.status === "waitlist"),
-    [registrations]
-  );
-
-  async function attendance(playerId: string, attended: boolean) {
-    await upsertAttendance(match.id, playerId, attended);
-    onChanged();
-  }
-
-  async function payment(playerId: string, status: PaymentStatus) {
-    await updatePayment(match.id, playerId, match.price_per_player, status);
-    onChanged();
-  }
-
-  return (
-    <section className="card">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-black text-ink">Pagos y asistencia</h2>
-        <p className="text-sm font-semibold text-ink/60">
-          {formatDate(match.date)} · {formatCurrency(match.price_per_player)}
-        </p>
-      </div>
-      <div className="mt-4 grid gap-3">
-        {activeRegistrations.map((registration) => {
-          const attendanceRecord = data.attendance.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
-          const paymentRecord = data.payments.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
-
-          return (
-            <div key={registration.id} className="grid gap-3 rounded-lg border border-ink/10 p-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-black text-ink">{registration.player.name}</p>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <StatusPill status={registration.status === "confirmed" ? "confirmed" : "waitlist"} />
-                    <span className="status-pill bg-line text-ink">{formatCurrency(match.price_per_player)}</span>
-                  </div>
-                </div>
-                <StatusPill status={(paymentRecord?.status ?? "pending") as PaymentStatus} />
-              </div>
-              {paymentRecord ? (
-                <div className="grid gap-1 rounded-lg bg-line/70 p-3 text-sm font-semibold text-ink/70 sm:grid-cols-2">
-                  <p>Reportado: {paymentRecord.reported_amount ? formatCurrency(paymentRecord.reported_amount) : "Sin reporte"}</p>
-                  <p>Método: {paymentRecord.method || "Sin método"}</p>
-                  <p>Referencia: {paymentRecord.reference || "Sin referencia"}</p>
-                  <p>Fecha: {paymentRecord.reported_at ? new Date(paymentRecord.reported_at).toLocaleString("es-CO") : "Sin fecha"}</p>
-                  {paymentRecord.comment ? <p className="sm:col-span-2">Comentario: {paymentRecord.comment}</p> : null}
-                </div>
-              ) : null}
-              <div className="grid gap-2 sm:grid-cols-2">
-                <select className="field py-2" value={attendanceRecord?.attended ? "yes" : "no"} onChange={(event) => attendance(registration.player_id, event.target.value === "yes")}>
-                  <option value="yes">Asistió</option>
-                  <option value="no">No asistió</option>
-                </select>
-                <select className="field py-2" value={paymentRecord?.status ?? "pending"} onChange={(event) => payment(registration.player_id, event.target.value as PaymentStatus)}>
-                  <option value="pending">Pendiente</option>
-                  <option value="pending_review">Por revisar</option>
-                  <option value="paid">Pagado</option>
-                  <option value="rejected">Rechazado</option>
-                  <option value="debt">Deuda</option>
-                  <option value="waived">Exonerado</option>
-                </select>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </section>
   );
