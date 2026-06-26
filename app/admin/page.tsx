@@ -435,20 +435,20 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
   return (
     <section className="card">
       <h2 className="text-xl font-black text-ink">Partido semanal</h2>
-      <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={submit}>
-        <label className="grid gap-2">
+      <form className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" onSubmit={submit}>
+        <label className="grid min-w-0 gap-2">
           <span className="label">Fecha</span>
           <input className="field" type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Hora</span>
           <input className="field" value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Lugar</span>
           <input className="field" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Valor por jugador</span>
           <input
             className="field"
@@ -457,27 +457,27 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
             onChange={(event) => setForm({ ...form, price_per_player: Number(event.target.value) })}
           />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Responsable del pago</span>
           <input className="field" value={form.payment_responsible_name} onChange={(event) => setForm({ ...form, payment_responsible_name: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Tipo de llave</span>
           <input className="field" placeholder="Nequi, Daviplata, Bancolombia" value={form.payment_key_type} onChange={(event) => setForm({ ...form, payment_key_type: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Llave de pago</span>
           <input className="field" value={form.payment_key} onChange={(event) => setForm({ ...form, payment_key: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Fecha límite de pago</span>
           <input className="field" value={form.payment_deadline} onChange={(event) => setForm({ ...form, payment_deadline: event.target.value })} />
         </label>
-        <label className="grid gap-2 sm:col-span-2">
+        <label className="grid min-w-0 gap-2 sm:col-span-2">
           <span className="label">Nota de pago</span>
           <textarea className="field min-h-24" value={form.payment_note} onChange={(event) => setForm({ ...form, payment_note: event.target.value })} />
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Cupo activo</span>
           <select
             className="field"
@@ -489,7 +489,7 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
             <option value={20}>20 jugadores</option>
           </select>
         </label>
-        <label className="grid gap-2">
+        <label className="grid min-w-0 gap-2">
           <span className="label">Estado</span>
           <select className="field" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as MatchStatus })}>
             <option value="open">Abierto</option>

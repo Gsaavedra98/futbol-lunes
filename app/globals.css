@@ -31,11 +31,13 @@ input,
 select,
 textarea {
   font: inherit;
+  max-width: 100%;
+  min-width: 0;
 }
 
 @layer components {
   .field {
-    @apply w-full rounded-lg border border-ink/15 bg-white px-4 py-3 text-base text-ink outline-none transition focus:border-pitch focus:ring-4 focus:ring-mint/40;
+    @apply block w-full min-w-0 max-w-full rounded-lg border border-ink/15 bg-white px-4 py-3 text-base text-ink outline-none transition focus:border-pitch focus:ring-4 focus:ring-mint/40;
   }
 
   .label {
