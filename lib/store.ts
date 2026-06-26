@@ -209,6 +209,22 @@ export async function cancelRegistration(input: {
   }
 }
 
+export async function reportPayment(input: {
+  name: string;
+  method: string;
+  amount: number | string;
+  reference?: string;
+  comment?: string;
+}) {
+  const response = await fetch("/api/report-payment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  return readJson<{ ok: true }>(response);
+}
+
 async function adminAction(body: Record<string, unknown>) {
   const response = await fetch("/api/admin/action", {
     method: "POST",
@@ -225,6 +241,11 @@ export async function updateMatch(input: {
   time: string;
   location: string;
   price_per_player: number;
+  payment_responsible_name?: string | null;
+  payment_key?: string | null;
+  payment_key_type?: string | null;
+  payment_deadline?: string | null;
+  payment_note?: string | null;
   active_capacity: 12 | 18 | 20;
   status: MatchStatus;
 }) {

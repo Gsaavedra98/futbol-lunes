@@ -6,10 +6,21 @@ create table if not exists matches (
   time text not null,
   location text not null,
   price_per_player integer not null check (price_per_player >= 0),
+  payment_responsible_name text,
+  payment_key text,
+  payment_key_type text,
+  payment_deadline text,
+  payment_note text,
   active_capacity integer not null check (active_capacity in (12, 18, 20)),
   status text not null check (status in ('open', 'closed', 'finished')) default 'open',
   created_at timestamptz not null default now()
 );
+
+alter table matches add column if not exists payment_responsible_name text;
+alter table matches add column if not exists payment_key text;
+alter table matches add column if not exists payment_key_type text;
+alter table matches add column if not exists payment_deadline text;
+alter table matches add column if not exists payment_note text;
 
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
@@ -59,11 +70,24 @@ create table if not exists payments (
   match_id uuid not null references matches(id) on delete cascade,
   player_id uuid not null references players(id) on delete cascade,
   amount integer not null check (amount >= 0),
-  status text not null check (status in ('pending', 'paid', 'waived')) default 'pending',
+  status text not null check (status in ('pending', 'pending_review', 'paid', 'rejected', 'debt', 'waived')) default 'pending',
+  method text,
+  reference text,
+  comment text,
+  reported_amount integer check (reported_amount is null or reported_amount >= 0),
+  reported_at timestamptz,
   reason text,
   created_at timestamptz not null default now(),
   unique (match_id, player_id)
 );
+
+alter table payments drop constraint if exists payments_status_check;
+alter table payments add constraint payments_status_check check (status in ('pending', 'pending_review', 'paid', 'rejected', 'debt', 'waived'));
+alter table payments add column if not exists method text;
+alter table payments add column if not exists reference text;
+alter table payments add column if not exists comment text;
+alter table payments add column if not exists reported_amount integer check (reported_amount is null or reported_amount >= 0);
+alter table payments add column if not exists reported_at timestamptz;
 
 create table if not exists attendance (
   id uuid primary key default gen_random_uuid(),
@@ -193,11 +217,17 @@ select
     when active_registrations.active_position <= matches.active_capacity then 'confirmed'
     else 'waitlist'
   end as status,
+  case
+    when payments.status = 'paid' then 'paid'
+    else 'pending'
+  end as payment_status,
   active_registrations.created_at,
   players.name as player_name
 from active_registrations
 join players on players.id = active_registrations.player_id
 join matches on matches.id = active_registrations.match_id
+left join payments on payments.match_id = active_registrations.match_id
+  and payments.player_id = active_registrations.player_id
 where matches.status = 'open'
 order by active_registrations.active_position asc;
 
@@ -467,9 +497,9 @@ begin
 
   if possible_debt then
     insert into payments (match_id, player_id, amount, status, reason)
-    values (selected_match_id, selected_player_id, selected_price, 'pending', 'Cancelación el mismo lunes sin reemplazo confirmado')
+    values (selected_match_id, selected_player_id, selected_price, 'debt', 'Cancelación tardía estando confirmado')
     on conflict (match_id, player_id) do update
-    set status = excluded.status,
+    set status = 'debt',
         amount = excluded.amount,
         reason = excluded.reason;
   end if;

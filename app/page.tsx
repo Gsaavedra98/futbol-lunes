@@ -5,6 +5,8 @@ import {
   AlertTriangle,
   Banknote,
   CalendarDays,
+  CheckCircle2,
+  Copy,
   MapPin,
   ShieldCheck,
   UserMinus,
@@ -25,6 +27,7 @@ export default function HomePage() {
   const [counts, setCounts] = useState({ confirmed: 0, waitlist: 0, available: 0 });
   const [confirmed, setConfirmed] = useState<RegistrationWithPlayer[]>([]);
   const [waitlist, setWaitlist] = useState<RegistrationWithPlayer[]>([]);
+  const [copiedPaymentKey, setCopiedPaymentKey] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -82,6 +85,38 @@ export default function HomePage() {
         <Action href="/anotarme" icon={<UserPlus size={22} />} title="Anotarme" />
         <Action href="/cancelar" icon={<UserMinus size={22} />} title="Cancelar" secondary />
         <Action href="/admin" icon={<ShieldCheck size={22} />} title="Admin" secondary />
+      </section>
+
+      <section className="card">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.08em] text-pitch">Pago del partido</p>
+            <h2 className="mt-1 text-xl font-black text-ink">{formatCurrency(match.price_per_player)}</h2>
+          </div>
+          <Banknote className="text-pitch" size={24} />
+        </div>
+        <div className="mt-4 grid gap-2 text-sm font-semibold text-ink/70">
+          <p>Responsable: <span className="font-black text-ink">{match.payment_responsible_name || "Por definir"}</span></p>
+          <p>{match.payment_key_type || "Llave"}: <span className="font-black text-ink">{match.payment_key || "Por definir"}</span></p>
+          {match.payment_deadline ? <p>Fecha límite: <span className="font-black text-ink">{match.payment_deadline}</span></p> : null}
+          {match.payment_note ? <p className="rounded-lg bg-line/70 p-3">{match.payment_note}</p> : null}
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button
+            className="secondary-button"
+            disabled={!match.payment_key}
+            onClick={async () => {
+              if (!match.payment_key) return;
+              await navigator.clipboard.writeText(match.payment_key);
+              setCopiedPaymentKey(true);
+              window.setTimeout(() => setCopiedPaymentKey(false), 1400);
+            }}
+          >
+            <Copy size={18} />
+            {copiedPaymentKey ? "Llave copiada" : "Copiar llave"}
+          </button>
+          <Action href="/pago" icon={<CheckCircle2 size={20} />} title="Reportar pago" />
+        </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-2">

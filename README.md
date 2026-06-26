@@ -17,6 +17,7 @@ En muchos grupos de fútbol la organización ocurre en mensajes sueltos: se pier
 - Cambio manual de estado de inscritos.
 - Revisión de cancelaciones y decisión de deuda.
 - Control de asistencia, pagos y deudas.
+- Configuración de llave de pago por partido y reporte de pagos sin pasarela.
 - Resumen copiable para WhatsApp.
 - PWA con manifest, service worker e ícono temporal.
 - Fallback local con datos mock solo para demo en desarrollo.
@@ -79,6 +80,8 @@ El script crea las tablas:
 - `attendance`
 
 También inserta un partido de prueba, 15 jugadores, 12 confirmados y 3 en lista de espera.
+
+Si ya tienes la base creada, vuelve a ejecutar `supabase/schema.sql` después de actualizar el proyecto. El script agrega campos de pago al partido, amplía estados de `payments` y actualiza la vista pública para mostrar solo `Pagado` o `Pendiente`.
 
 El script habilita Row Level Security en todas las tablas y deja al público con acceso mínimo:
 

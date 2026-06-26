@@ -3,7 +3,7 @@ export type RegistrationStatus = "confirmed" | "waitlist" | "cancelled" | "repla
 export type CancellationAction = "cancel" | "cancel_with_replacement" | "replacement";
 export type DeclaredStatus = "confirmed" | "waitlist" | "unknown";
 export type AdminDecision = "pending" | "waived" | "debt" | "replaced";
-export type PaymentStatus = "pending" | "paid" | "waived";
+export type PaymentStatus = "pending" | "pending_review" | "paid" | "rejected" | "debt" | "waived";
 
 export type Match = {
   id: string;
@@ -11,6 +11,11 @@ export type Match = {
   time: string;
   location: string;
   price_per_player: number;
+  payment_responsible_name?: string | null;
+  payment_key?: string | null;
+  payment_key_type?: string | null;
+  payment_deadline?: string | null;
+  payment_note?: string | null;
   active_capacity: 12 | 18 | 20;
   status: MatchStatus;
   created_at: string;
@@ -29,6 +34,7 @@ export type Registration = {
   player_id: string;
   position: number;
   status: RegistrationStatus;
+  payment_status?: PaymentStatus | null;
   accepted_terms: boolean;
   created_at: string;
 };
@@ -55,6 +61,11 @@ export type Payment = {
   player_id: string;
   amount: number;
   status: PaymentStatus;
+  method?: string | null;
+  reference?: string | null;
+  comment?: string | null;
+  reported_amount?: number | null;
+  reported_at?: string | null;
   reason?: string | null;
   created_at: string;
 };

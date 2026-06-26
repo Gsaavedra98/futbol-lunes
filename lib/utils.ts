@@ -130,7 +130,13 @@ export function generateWhatsAppSummary(
   ) as RegistrationWithPlayer[];
   const confirmed = active.filter((registration) => registration.status === "confirmed");
   const waitlist = active.filter((registration) => registration.status === "waitlist");
-  const debts = payments.filter((payment) => payment.match_id === match.id && payment.status === "pending");
+  const debts = payments.filter((payment) => payment.match_id === match.id && payment.status === "debt");
+  const paymentStatusFor = (registration: RegistrationWithPlayer) => {
+    const payment = payments.find(
+      (item) => item.match_id === match.id && item.player_id === registration.player_id
+    );
+    return payment?.status === "paid" || registration.payment_status === "paid" ? "✅" : "⏳";
+  };
   const cancellationLines = cancellations
     .filter((cancellation) => cancellation.match_id === match.id)
     .slice(0, 5)
@@ -154,10 +160,12 @@ export function generateWhatsAppSummary(
     `Valor por persona: ${formatCurrency(match.price_per_player)}`,
     "",
     "Confirmados:",
-    ...confirmed.map((registration, index) => `${index + 1}. ${registration.player.name}`),
+    ...confirmed.map((registration, index) => `${index + 1}. ${registration.player.name} ${paymentStatusFor(registration)}`),
     "",
     "Lista de espera:",
-    waitlist.length ? waitlist.map((registration, index) => `${index + 1}. ${registration.player.name}`).join("\n") : "Sin lista de espera",
+    waitlist.length ? waitlist.map((registration, index) => `${index + 1}. ${registration.player.name} ${paymentStatusFor(registration)}`).join("\n") : "Sin lista de espera",
+    "",
+    "Pagos: ✅ Pagado · ⏳ Pendiente",
     "",
     "Regla: si estás confirmado y cancelas el mismo lunes sin reemplazo, debes pagar tu cupo.",
     cancellationLines.length ? `\nNovedades:\n${cancellationLines.join("\n")}` : "",

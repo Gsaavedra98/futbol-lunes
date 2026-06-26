@@ -25,6 +25,7 @@ type PublicRegistrationRow = {
   match_id: string;
   position: number;
   status: RegistrationStatus;
+  payment_status?: PaymentStatus | null;
   created_at: string;
   player_name: string;
 };
@@ -99,6 +100,7 @@ export async function getPublicDataFromSupabase() {
     player_id: row.id,
     position: row.position,
     status: row.status,
+    payment_status: row.payment_status ?? "pending",
     accepted_terms: true,
     created_at: row.created_at
   }));
@@ -114,9 +116,115 @@ export async function getPublicDataFromSupabase() {
     players,
     registrations,
     cancellations: [],
-    payments: [],
+    payments: ((list.data ?? []) as PublicRegistrationRow[]).map((row) => ({
+      id: `public-payment-${row.id}`,
+      match_id: row.match_id,
+      player_id: row.id,
+      amount: 0,
+      status: row.payment_status === "paid" ? "paid" : "pending",
+      reason: null,
+      created_at: row.created_at
+    })),
     attendance: []
   } satisfies AppData;
+}
+
+export async function reportPaymentInSupabase(input: {
+  name: string;
+  method: string;
+  amount: number;
+  reference?: string;
+  comment?: string;
+}) {
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) {
+    throw new Error(missingDatabaseMessage);
+  }
+
+  const name = normalizeName(input.name);
+  if (name.length < 3) {
+    throw new Error("Escribe tu nombre completo.");
+  }
+
+  if (!input.method.trim()) {
+    throw new Error("Indica el método de pago.");
+  }
+
+  if (!input.amount || input.amount <= 0) {
+    throw new Error("Indica el valor pagado.");
+  }
+
+  const { data: match, error: matchError } = await supabase
+    .from("matches")
+    .select("*")
+    .eq("status", "open")
+    .order("date", { ascending: true })
+    .limit(1)
+    .single<Match>();
+
+  if (matchError || !match) {
+    throw new Error("No hay partido abierto para reportar pago.");
+  }
+
+  const { data: registrations, error: registrationError } = await supabase
+    .from("registrations")
+    .select("id, match_id, player_id, status, players(name)")
+    .eq("match_id", match.id)
+    .neq("status", "cancelled")
+    .limit(200);
+
+  if (registrationError) {
+    throw new Error(registrationError.message);
+  }
+
+  const registration = (registrations ?? []).find((item) => {
+    const player = Array.isArray(item.players) ? item.players[0] : item.players;
+    return player?.name?.trim().toLowerCase() === name.toLowerCase();
+  });
+
+  let playerId = registration?.player_id;
+
+  if (!playerId) {
+    const { data: player, error: playerError } = await supabase
+      .from("players")
+      .select("*")
+      .ilike("name", name)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<Player>();
+
+    if (playerError) {
+      throw new Error(playerError.message);
+    }
+
+    playerId = player?.id;
+  }
+
+  if (!playerId) {
+    throw new Error("No encontramos una inscripción activa con ese nombre.");
+  }
+
+  const { error } = await supabase
+    .from("payments")
+    .upsert(
+      {
+        match_id: match.id,
+        player_id: playerId,
+        amount: match.price_per_player,
+        status: "pending_review",
+        method: input.method.trim(),
+        reference: input.reference?.trim() || null,
+        comment: input.comment?.trim() || null,
+        reported_amount: input.amount,
+        reported_at: new Date().toISOString(),
+        reason: "Pago reportado por jugador"
+      },
+      { onConflict: "match_id,player_id" }
+    );
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function getAdminDataFromSupabase() {
@@ -239,6 +347,11 @@ export async function updateMatchInSupabase(input: {
   time: string;
   location: string;
   price_per_player: number;
+  payment_responsible_name?: string | null;
+  payment_key?: string | null;
+  payment_key_type?: string | null;
+  payment_deadline?: string | null;
+  payment_note?: string | null;
   active_capacity: 12 | 18 | 20;
   status: MatchStatus;
 }) {
@@ -287,6 +400,14 @@ export async function upsertAttendanceInSupabase(matchId: string, playerId: stri
 export async function upsertPaymentInSupabase(matchId: string, playerId: string, amount: number, status: PaymentStatus) {
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error(missingDatabaseMessage);
+  const reasonByStatus: Record<PaymentStatus, string> = {
+    pending: "Pendiente de pago",
+    pending_review: "Pago reportado pendiente de revisión",
+    paid: "Pago verificado por admin",
+    rejected: "Reporte rechazado por admin",
+    debt: "Deuda registrada por admin",
+    waived: "Deuda exonerada por admin"
+  };
   const { error } = await supabase
     .from("payments")
     .upsert(
@@ -295,7 +416,7 @@ export async function upsertPaymentInSupabase(matchId: string, playerId: string,
         player_id: playerId,
         amount,
         status,
-        reason: status === "paid" ? "Pago registrado por admin" : status === "waived" ? "Deuda exonerada por admin" : "Pendiente de pago"
+        reason: reasonByStatus[status]
       },
       { onConflict: "match_id,player_id" }
     );

@@ -150,6 +150,11 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
     time: match.time,
     location: match.location,
     price_per_player: match.price_per_player,
+    payment_responsible_name: match.payment_responsible_name ?? "",
+    payment_key: match.payment_key ?? "",
+    payment_key_type: match.payment_key_type ?? "",
+    payment_deadline: match.payment_deadline ?? "",
+    payment_note: match.payment_note ?? "",
     active_capacity: match.active_capacity,
     status: match.status
   });
@@ -184,6 +189,26 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
             value={form.price_per_player}
             onChange={(event) => setForm({ ...form, price_per_player: Number(event.target.value) })}
           />
+        </label>
+        <label className="grid gap-2">
+          <span className="label">Responsable del pago</span>
+          <input className="field" value={form.payment_responsible_name} onChange={(event) => setForm({ ...form, payment_responsible_name: event.target.value })} />
+        </label>
+        <label className="grid gap-2">
+          <span className="label">Tipo de llave</span>
+          <input className="field" placeholder="Nequi, Daviplata, Bancolombia" value={form.payment_key_type} onChange={(event) => setForm({ ...form, payment_key_type: event.target.value })} />
+        </label>
+        <label className="grid gap-2">
+          <span className="label">Llave de pago</span>
+          <input className="field" value={form.payment_key} onChange={(event) => setForm({ ...form, payment_key: event.target.value })} />
+        </label>
+        <label className="grid gap-2">
+          <span className="label">Fecha límite de pago</span>
+          <input className="field" value={form.payment_deadline} onChange={(event) => setForm({ ...form, payment_deadline: event.target.value })} />
+        </label>
+        <label className="grid gap-2 sm:col-span-2">
+          <span className="label">Nota de pago</span>
+          <textarea className="field min-h-24" value={form.payment_note} onChange={(event) => setForm({ ...form, payment_note: event.target.value })} />
         </label>
         <label className="grid gap-2">
           <span className="label">Cupo activo</span>
@@ -320,7 +345,10 @@ function PaymentsAdmin({
   registrations: RegistrationWithPlayer[];
   onChanged: () => void;
 }) {
-  const confirmed = useMemo(() => registrations.filter((registration) => registration.status === "confirmed"), [registrations]);
+  const activeRegistrations = useMemo(
+    () => registrations.filter((registration) => registration.status === "confirmed" || registration.status === "waitlist"),
+    [registrations]
+  );
 
   async function attendance(playerId: string, attended: boolean) {
     await upsertAttendance(match.id, playerId, attended);
@@ -335,28 +363,51 @@ function PaymentsAdmin({
   return (
     <section className="card">
       <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-black text-ink">Control del partido</h2>
+        <h2 className="text-xl font-black text-ink">Pagos y asistencia</h2>
         <p className="text-sm font-semibold text-ink/60">
           {formatDate(match.date)} · {formatCurrency(match.price_per_player)}
         </p>
       </div>
       <div className="mt-4 grid gap-3">
-        {confirmed.map((registration) => {
+        {activeRegistrations.map((registration) => {
           const attendanceRecord = data.attendance.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
           const paymentRecord = data.payments.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
 
           return (
-            <div key={registration.id} className="grid gap-3 rounded-lg border border-ink/10 p-3 sm:grid-cols-[1fr_150px_150px] sm:items-center">
-              <p className="font-black text-ink">{registration.player.name}</p>
-              <select className="field py-2" value={attendanceRecord?.attended ? "yes" : "no"} onChange={(event) => attendance(registration.player_id, event.target.value === "yes")}>
-                <option value="yes">Asistió</option>
-                <option value="no">No asistió</option>
-              </select>
-              <select className="field py-2" value={paymentRecord?.status ?? "pending"} onChange={(event) => payment(registration.player_id, event.target.value as PaymentStatus)}>
-                <option value="pending">Debe</option>
-                <option value="paid">Pagó</option>
-                <option value="waived">Sin deuda</option>
-              </select>
+            <div key={registration.id} className="grid gap-3 rounded-lg border border-ink/10 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="font-black text-ink">{registration.player.name}</p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <StatusPill status={registration.status === "confirmed" ? "confirmed" : "waitlist"} />
+                    <span className="status-pill bg-line text-ink">{formatCurrency(match.price_per_player)}</span>
+                  </div>
+                </div>
+                <StatusPill status={(paymentRecord?.status ?? "pending") as PaymentStatus} />
+              </div>
+              {paymentRecord ? (
+                <div className="grid gap-1 rounded-lg bg-line/70 p-3 text-sm font-semibold text-ink/70 sm:grid-cols-2">
+                  <p>Reportado: {paymentRecord.reported_amount ? formatCurrency(paymentRecord.reported_amount) : "Sin reporte"}</p>
+                  <p>Método: {paymentRecord.method || "Sin método"}</p>
+                  <p>Referencia: {paymentRecord.reference || "Sin referencia"}</p>
+                  <p>Fecha: {paymentRecord.reported_at ? new Date(paymentRecord.reported_at).toLocaleString("es-CO") : "Sin fecha"}</p>
+                  {paymentRecord.comment ? <p className="sm:col-span-2">Comentario: {paymentRecord.comment}</p> : null}
+                </div>
+              ) : null}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <select className="field py-2" value={attendanceRecord?.attended ? "yes" : "no"} onChange={(event) => attendance(registration.player_id, event.target.value === "yes")}>
+                  <option value="yes">Asistió</option>
+                  <option value="no">No asistió</option>
+                </select>
+                <select className="field py-2" value={paymentRecord?.status ?? "pending"} onChange={(event) => payment(registration.player_id, event.target.value as PaymentStatus)}>
+                  <option value="pending">Pendiente</option>
+                  <option value="pending_review">Por revisar</option>
+                  <option value="paid">Pagado</option>
+                  <option value="rejected">Rechazado</option>
+                  <option value="debt">Deuda</option>
+                  <option value="waived">Exonerado</option>
+                </select>
+              </div>
             </div>
           );
         })}

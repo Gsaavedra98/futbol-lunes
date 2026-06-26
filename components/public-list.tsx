@@ -1,5 +1,6 @@
 import type { RegistrationWithPlayer } from "@/lib/types";
 import { StatusPill } from "./status-pill";
+import { CheckCircle2, Clock3 } from "lucide-react";
 
 export function PublicList({
   title,
@@ -43,13 +44,26 @@ export function PublicList({
                 </span>
                 <span className="truncate font-bold text-ink">{registration.player.name}</span>
               </div>
-              {rowBadgeLabel ? (
-                <span className={status === "waitlist" ? "status-pill bg-sun/30 text-ink" : "status-pill bg-mint text-pitch"}>
-                  {rowBadgeLabel}
-                </span>
-              ) : (
-                <StatusPill status={status} className="shrink-0" />
-              )}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {registration.payment_status === "paid" ? (
+                  <span className="status-pill bg-mint text-pitch">
+                    <CheckCircle2 size={13} />
+                    Pagado
+                  </span>
+                ) : (
+                  <span className="status-pill bg-sun/25 text-ink">
+                    <Clock3 size={13} />
+                    Pendiente
+                  </span>
+                )}
+                {rowBadgeLabel ? (
+                  <span className={status === "waitlist" ? "status-pill hidden bg-sun/30 text-ink sm:inline-flex" : "status-pill hidden bg-mint text-pitch sm:inline-flex"}>
+                    {rowBadgeLabel}
+                  </span>
+                ) : (
+                  <StatusPill status={status} className="hidden shrink-0 sm:inline-flex" />
+                )}
+              </div>
             </div>
           ))
         ) : (
