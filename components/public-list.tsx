@@ -31,9 +31,7 @@ export function PublicList({
           <span className={status === "waitlist" ? "status-pill bg-sun/30 text-ink" : "status-pill bg-mint text-pitch"}>
             {badgeLabel}
           </span>
-        ) : (
-          <StatusPill status={status} />
-        )}
+        ) : null}
       </div>
       <div className="space-y-2">
         {registrations.length ? (
