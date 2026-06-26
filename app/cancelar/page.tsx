@@ -1,12 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Send } from "lucide-react";
 import { cancelRegistration } from "@/lib/store";
 import type { CancellationAction, DeclaredStatus } from "@/lib/types";
+import { getRememberedPlayers, rememberPlayer, type RememberedPlayer } from "@/lib/name-memory";
 
 export default function CancelPage() {
   const [name, setName] = useState("");
+  const [rememberedPlayers, setRememberedPlayers] = useState<RememberedPlayer[]>([]);
   const [actionType, setActionType] = useState<CancellationAction>("cancel");
   const [declaredStatus, setDeclaredStatus] = useState<DeclaredStatus>("unknown");
   const [hasReplacement, setHasReplacement] = useState(false);
@@ -16,6 +18,10 @@ export default function CancelPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setRememberedPlayers(getRememberedPlayers());
+  }, []);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -24,6 +30,8 @@ export default function CancelPage() {
 
     try {
       const result = await cancelRegistration({ name, actionType, declaredStatus, hasReplacement, replacementName, note });
+      rememberPlayer(name);
+      setRememberedPlayers(getRememberedPlayers());
       setMessage(
         result.possibleDebt
           ? "Cancelación recibida. Como parece ser lunes y estabas confirmado sin reemplazo, queda como posible deuda para revisión del administrador."
@@ -47,7 +55,20 @@ export default function CancelPage() {
         <form className="mt-5 grid gap-4" onSubmit={onSubmit}>
           <label className="grid gap-2">
             <span className="label">Nombre completo</span>
-            <input className="field" value={name} onChange={(event) => setName(event.target.value)} required minLength={3} />
+            <input
+              className="field"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              list="remembered-cancel-player-names"
+              autoComplete="name"
+              required
+              minLength={3}
+            />
+            <datalist id="remembered-cancel-player-names">
+              {rememberedPlayers.map((player) => (
+                <option key={player.name} value={player.name} />
+              ))}
+            </datalist>
           </label>
           <label className="grid gap-2">
             <span className="label">Acción</span>

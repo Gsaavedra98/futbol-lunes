@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Banknote,
   CalendarDays,
-  Home,
   MapPin,
   ShieldCheck,
   UserMinus,
@@ -56,7 +55,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="grid gap-4 pb-20 sm:gap-5 sm:pb-6">
+    <div className="grid gap-4 sm:gap-5">
       <section className="card">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -112,15 +111,6 @@ export default function HomePage() {
           debe pagar su cupo.
         </p>
       </section>
-
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-white/95 px-3 py-2 shadow-soft backdrop-blur sm:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
-          <BottomAction href="/" icon={<Home size={19} />} label="Inicio" />
-          <BottomAction href="/anotarme" icon={<UserPlus size={19} />} label="Anotarme" />
-          <BottomAction href="/cancelar" icon={<UserMinus size={19} />} label="Cancelar" />
-          <BottomAction href="/admin" icon={<ShieldCheck size={19} />} label="Admin" />
-        </div>
-      </nav>
     </div>
   );
 }
@@ -162,15 +152,6 @@ function Action({
     <Link href={href} className={secondary ? "secondary-button justify-start" : "primary-button justify-start"}>
       {icon}
       {title}
-    </Link>
-  );
-}
-
-function BottomAction({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
-  return (
-    <Link href={href} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-xs font-black text-ink/75 active:bg-line">
-      {icon}
-      {label}
     </Link>
   );
 }

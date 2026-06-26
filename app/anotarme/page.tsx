@@ -2,19 +2,38 @@
 
 import Link from "next/link";
 import { CheckCircle2, Send } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { StatusPill } from "@/components/status-pill";
 import { registerPlayer } from "@/lib/store";
 import type { RegistrationStatus } from "@/lib/types";
+import {
+  getRememberedPlayers,
+  phoneForRememberedPlayer,
+  rememberPlayer,
+  type RememberedPlayer
+} from "@/lib/name-memory";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [rememberedPlayers, setRememberedPlayers] = useState<RememberedPlayer[]>([]);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [status, setStatus] = useState<RegistrationStatus | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setRememberedPlayers(getRememberedPlayers());
+  }, []);
+
+  function updateName(nextName: string) {
+    setName(nextName);
+    const rememberedPhone = phoneForRememberedPlayer(nextName);
+    if (rememberedPhone && !phone) {
+      setPhone(rememberedPhone);
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -24,6 +43,8 @@ export default function RegisterPage() {
 
     try {
       const result = await registerPlayer({ name, phone, acceptedTerms });
+      rememberPlayer(name, phone);
+      setRememberedPlayers(getRememberedPlayers());
       setStatus(result.status);
       setMessage(
         result.status === "confirmed"
@@ -44,7 +65,20 @@ export default function RegisterPage() {
         <form className="mt-5 grid gap-4" onSubmit={onSubmit}>
           <label className="grid gap-2">
             <span className="label">Nombre completo</span>
-            <input className="field" value={name} onChange={(event) => setName(event.target.value)} required minLength={3} />
+            <input
+              className="field"
+              value={name}
+              onChange={(event) => updateName(event.target.value)}
+              list="remembered-player-names"
+              autoComplete="name"
+              required
+              minLength={3}
+            />
+            <datalist id="remembered-player-names">
+              {rememberedPlayers.map((player) => (
+                <option key={player.name} value={player.name} />
+              ))}
+            </datalist>
           </label>
           <label className="grid gap-2">
             <span className="label">WhatsApp opcional</span>

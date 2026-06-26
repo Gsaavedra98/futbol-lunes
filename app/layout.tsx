@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Trophy } from "lucide-react";
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa-register";
+import { PublicBottomNav } from "@/components/public-bottom-nav";
 
 export const metadata: Metadata = {
   title: "Fútbol Lunes",
@@ -44,7 +45,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </div>
           </nav>
         </header>
-        <main className="mx-auto w-full min-w-0 max-w-5xl px-3 py-4 sm:px-4 sm:py-8">{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-5xl px-3 py-4 pb-24 sm:px-4 sm:py-8">{children}</main>
+        <PublicBottomNav />
       </body>
     </html>
   );
