@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Home, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
+import { ListChecks, ShieldCheck, UserMinus, UserPlus } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/", label: "Inicio", icon: Home },
+  { href: "/", label: "Lista", icon: ListChecks },
   { href: "/anotarme", label: "Anotarme", icon: UserPlus },
   { href: "/cancelar", label: "Cancelar", icon: UserMinus },
   { href: "/admin", label: "Admin", icon: ShieldCheck }

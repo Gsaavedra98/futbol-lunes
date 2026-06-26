@@ -8,9 +8,6 @@ import {
   CheckCircle2,
   Copy,
   MapPin,
-  ShieldCheck,
-  UserMinus,
-  UserPlus,
   Users
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -79,12 +76,6 @@ export default function HomePage() {
           <CupMetric label="Disponibles" value={counts.available} />
           <CupMetric label="Suplentes" value={counts.waitlist} />
         </div>
-      </section>
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <Action href="/anotarme" icon={<UserPlus size={22} />} title="Anotarme" />
-        <Action href="/cancelar" icon={<UserMinus size={22} />} title="Cancelar" secondary />
-        <Action href="/admin" icon={<ShieldCheck size={22} />} title="Admin" secondary />
       </section>
 
       <section className="card">
