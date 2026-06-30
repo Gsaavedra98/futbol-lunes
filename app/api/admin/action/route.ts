@@ -3,6 +3,7 @@ import { isAdminSessionValid } from "@/lib/server/admin-auth";
 import {
   updateCancellationDecisionInSupabase,
   updateMatchInSupabase,
+  updatePaymentSettingsInSupabase,
   updateRegistrationStatusInSupabase,
   upsertAttendanceInSupabase,
   upsertPaymentInSupabase
@@ -24,13 +25,18 @@ export async function POST(request: Request) {
         time: body.match?.time,
         location: body.match?.location,
         price_per_player: Number(body.match?.price_per_player),
-        payment_responsible_name: body.match?.payment_responsible_name || null,
-        payment_key: body.match?.payment_key || null,
-        payment_key_type: body.match?.payment_key_type || null,
-        payment_deadline: body.match?.payment_deadline || null,
-        payment_note: body.match?.payment_note || null,
         active_capacity: Number(body.match?.active_capacity) as 12 | 18 | 20,
         status: body.match?.status as MatchStatus
+      });
+    }
+
+    if (body.action === "updatePaymentSettings") {
+      await updatePaymentSettingsInSupabase({
+        responsible_name: body.paymentSettings?.responsible_name || null,
+        payment_key: body.paymentSettings?.payment_key || null,
+        payment_key_type: body.paymentSettings?.payment_key_type || null,
+        payment_deadline: body.paymentSettings?.payment_deadline || null,
+        payment_note: body.paymentSettings?.payment_note || null
       });
     }
 

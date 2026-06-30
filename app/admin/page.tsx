@@ -22,6 +22,7 @@ import {
   updateCancellationDecision,
   updateMatch,
   updatePayment,
+  updatePaymentSettings,
   updateRegistrationStatus,
   upsertAttendance
 } from "@/lib/store";
@@ -31,6 +32,7 @@ import type {
   CancellationWithPlayer,
   Match,
   MatchStatus,
+  PaymentSettings,
   PaymentStatus,
   RegistrationStatus,
   RegistrationWithPlayer
@@ -147,6 +149,7 @@ export default function AdminPage() {
       </div>
 
       <MatchEditor match={match} onSaved={refresh} />
+      <PaymentSettingsEditor settings={data.paymentSettings ?? null} onSaved={refresh} />
       <AdminSummary data={data} match={match} registrations={registrations} cancellations={cancellations} />
       <PlayerManagement data={data} match={match} registrations={registrations} onChanged={refresh} />
       <CancellationsAdmin match={match} cancellations={cancellations} onChanged={refresh} />
@@ -197,7 +200,7 @@ function SummaryTile({ label, value, tone = "default" }: { label: string; value:
   );
 }
 
-type PlayerFilter = "all" | "confirmed" | "waitlist" | "cancelled" | "payment_pending" | "debt";
+type PlayerFilter = "all" | "confirmed" | "waitlist" | "cancelled" | "payment_pending" | "pending_review" | "paid" | "rejected" | "debt" | "waived";
 
 const playerFilters: Array<{ id: PlayerFilter; label: string }> = [
   { id: "all", label: "Todos" },
@@ -205,7 +208,11 @@ const playerFilters: Array<{ id: PlayerFilter; label: string }> = [
   { id: "waitlist", label: "Suplentes" },
   { id: "cancelled", label: "Cancelados" },
   { id: "payment_pending", label: "Pend. pago" },
-  { id: "debt", label: "Deudores" }
+  { id: "pending_review", label: "Por revisar" },
+  { id: "paid", label: "Pagados" },
+  { id: "rejected", label: "Rechazados" },
+  { id: "debt", label: "Deudores" },
+  { id: "waived", label: "Exonerados" }
 ];
 
 function PlayerManagement({
@@ -228,8 +235,8 @@ function PlayerManagement({
       registrations.filter((registration) => {
         const payment = data.payments.find((item) => item.match_id === match.id && item.player_id === registration.player_id);
         if (filter === "all") return true;
-        if (filter === "payment_pending") return registration.status !== "cancelled" && (!payment || payment.status === "pending" || payment.status === "pending_review");
-        if (filter === "debt") return payment?.status === "debt";
+        if (filter === "payment_pending") return registration.status !== "cancelled" && (!payment || payment.status === "pending");
+        if (["pending_review", "paid", "rejected", "debt", "waived"].includes(filter)) return payment?.status === filter;
         return registration.status === filter;
       }),
     [data.payments, filter, match.id, registrations]
@@ -417,11 +424,6 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
     time: match.time,
     location: match.location,
     price_per_player: match.price_per_player,
-    payment_responsible_name: match.payment_responsible_name ?? "",
-    payment_key: match.payment_key ?? "",
-    payment_key_type: match.payment_key_type ?? "",
-    payment_deadline: match.payment_deadline ?? "",
-    payment_note: match.payment_note ?? "",
     active_capacity: match.active_capacity,
     status: match.status
   });
@@ -458,26 +460,6 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
           />
         </label>
         <label className="grid min-w-0 gap-2">
-          <span className="label">Responsable del pago</span>
-          <input className="field" value={form.payment_responsible_name} onChange={(event) => setForm({ ...form, payment_responsible_name: event.target.value })} />
-        </label>
-        <label className="grid min-w-0 gap-2">
-          <span className="label">Tipo de llave</span>
-          <input className="field" placeholder="Nequi, Daviplata, Bancolombia" value={form.payment_key_type} onChange={(event) => setForm({ ...form, payment_key_type: event.target.value })} />
-        </label>
-        <label className="grid min-w-0 gap-2">
-          <span className="label">Llave de pago</span>
-          <input className="field" value={form.payment_key} onChange={(event) => setForm({ ...form, payment_key: event.target.value })} />
-        </label>
-        <label className="grid min-w-0 gap-2">
-          <span className="label">Fecha límite de pago</span>
-          <input className="field" value={form.payment_deadline} onChange={(event) => setForm({ ...form, payment_deadline: event.target.value })} />
-        </label>
-        <label className="grid min-w-0 gap-2 sm:col-span-2">
-          <span className="label">Nota de pago</span>
-          <textarea className="field min-h-24" value={form.payment_note} onChange={(event) => setForm({ ...form, payment_note: event.target.value })} />
-        </label>
-        <label className="grid min-w-0 gap-2">
           <span className="label">Cupo activo</span>
           <select
             className="field"
@@ -500,6 +482,74 @@ function MatchEditor({ match, onSaved }: { match: Match; onSaved: () => void }) 
         <button className="primary-button sm:col-span-2">
           <Save size={18} />
           Guardar partido
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function PaymentSettingsEditor({ settings, onSaved }: { settings: PaymentSettings | null; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    responsible_name: settings?.responsible_name ?? "",
+    payment_key: settings?.payment_key ?? "",
+    payment_key_type: settings?.payment_key_type ?? "",
+    payment_deadline: settings?.payment_deadline ?? "",
+    payment_note: settings?.payment_note ?? ""
+  });
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setForm({
+      responsible_name: settings?.responsible_name ?? "",
+      payment_key: settings?.payment_key ?? "",
+      payment_key_type: settings?.payment_key_type ?? "",
+      payment_deadline: settings?.payment_deadline ?? "",
+      payment_note: settings?.payment_note ?? ""
+    });
+  }, [settings]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await updatePaymentSettings(form);
+    setMessage("Datos de pago guardados.");
+    await onSaved();
+    window.setTimeout(() => setMessage(""), 1800);
+  }
+
+  return (
+    <section className="card">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-[0.08em] text-pitch">Configuración global</p>
+          <h2 className="text-xl font-black text-ink">Datos de pago</h2>
+        </div>
+        <Banknote className="text-pitch" size={24} />
+      </div>
+      <form className="mt-4 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" onSubmit={submit}>
+        <label className="grid min-w-0 gap-2">
+          <span className="label">Responsable del pago</span>
+          <input className="field" value={form.responsible_name} onChange={(event) => setForm({ ...form, responsible_name: event.target.value })} />
+        </label>
+        <label className="grid min-w-0 gap-2">
+          <span className="label">Tipo de llave</span>
+          <input className="field" placeholder="Nequi, Daviplata, Bancolombia" value={form.payment_key_type} onChange={(event) => setForm({ ...form, payment_key_type: event.target.value })} />
+        </label>
+        <label className="grid min-w-0 gap-2">
+          <span className="label">Llave de pago</span>
+          <input className="field" value={form.payment_key} onChange={(event) => setForm({ ...form, payment_key: event.target.value })} />
+        </label>
+        <label className="grid min-w-0 gap-2">
+          <span className="label">Fecha límite de pago</span>
+          <input className="field" value={form.payment_deadline} onChange={(event) => setForm({ ...form, payment_deadline: event.target.value })} />
+        </label>
+        <label className="grid min-w-0 gap-2 sm:col-span-2">
+          <span className="label">Nota de pago</span>
+          <textarea className="field min-h-24" value={form.payment_note} onChange={(event) => setForm({ ...form, payment_note: event.target.value })} />
+        </label>
+        {message ? <p className="rounded-lg bg-mint/50 p-3 text-sm font-bold text-pitch sm:col-span-2">{message}</p> : null}
+        <button className="primary-button sm:col-span-2">
+          <Save size={18} />
+          Guardar datos de pago
         </button>
       </form>
     </section>

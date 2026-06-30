@@ -22,6 +22,17 @@ alter table matches add column if not exists payment_key_type text;
 alter table matches add column if not exists payment_deadline text;
 alter table matches add column if not exists payment_note text;
 
+create table if not exists payment_settings (
+  id text primary key default 'default',
+  responsible_name text,
+  payment_key text,
+  payment_key_type text,
+  payment_deadline text,
+  payment_note text,
+  updated_at timestamptz not null default now(),
+  check (id = 'default')
+);
+
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -103,6 +114,25 @@ insert into matches (id, date, time, location, price_per_player, active_capacity
 values ('00000000-0000-0000-0000-000000000001', '2026-06-29', '8:00 p.m.', 'Cancha sintética La 70', 18000, 12, 'open')
 on conflict (id) do nothing;
 
+insert into payment_settings (
+  id,
+  responsible_name,
+  payment_key,
+  payment_key_type,
+  payment_deadline,
+  payment_note
+)
+select
+  'default',
+  payment_responsible_name,
+  payment_key,
+  payment_key_type,
+  payment_deadline,
+  payment_note
+from matches
+where id = '00000000-0000-0000-0000-000000000001'
+on conflict (id) do nothing;
+
 with seed_players(name, pos) as (
   values
     ('Andrés Rojas', 1),
@@ -149,6 +179,7 @@ on conflict do nothing;
 -- service_role key on the server only. Never expose service_role in frontend code.
 
 alter table matches enable row level security;
+alter table payment_settings enable row level security;
 alter table players enable row level security;
 alter table registrations enable row level security;
 alter table cancellations enable row level security;
@@ -156,6 +187,7 @@ alter table payments enable row level security;
 alter table attendance enable row level security;
 
 alter table matches force row level security;
+alter table payment_settings force row level security;
 alter table players force row level security;
 alter table registrations force row level security;
 alter table cancellations force row level security;
@@ -163,17 +195,20 @@ alter table payments force row level security;
 alter table attendance force row level security;
 
 drop policy if exists "Public can view active matches" on matches;
+drop policy if exists "Public can view payment settings" on payment_settings;
 drop policy if exists "Public can create players for signup flow" on players;
 drop policy if exists "Public can create registrations for active matches" on registrations;
 drop policy if exists "Public can create cancellations for active matches" on cancellations;
 
 revoke all on matches from anon, authenticated;
+revoke all on payment_settings from anon, authenticated;
 revoke all on players from anon, authenticated;
 revoke all on registrations from anon, authenticated;
 revoke all on cancellations from anon, authenticated;
 revoke all on payments from anon, authenticated;
 revoke all on attendance from anon, authenticated;
 revoke all on matches from public;
+revoke all on payment_settings from public;
 revoke all on players from public;
 revoke all on registrations from public;
 revoke all on cancellations from public;
@@ -187,6 +222,14 @@ to anon, authenticated
 using (status = 'open');
 
 grant select on matches to anon, authenticated;
+
+create policy "Public can view payment settings"
+on payment_settings
+for select
+to anon, authenticated
+using (id = 'default');
+
+grant select on payment_settings to anon, authenticated;
 
 -- Direct player reads are intentionally not granted, because phone is sensitive.
 -- Direct writes to players, registrations, and cancellations are also not granted.

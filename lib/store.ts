@@ -11,6 +11,7 @@ import type {
   Match,
   MatchStatus,
   PaymentStatus,
+  PaymentSettings,
   Registration,
   RegistrationStatus
 } from "./types";
@@ -241,11 +242,6 @@ export async function updateMatch(input: {
   time: string;
   location: string;
   price_per_player: number;
-  payment_responsible_name?: string | null;
-  payment_key?: string | null;
-  payment_key_type?: string | null;
-  payment_deadline?: string | null;
-  payment_note?: string | null;
   active_capacity: 12 | 18 | 20;
   status: MatchStatus;
 }) {
@@ -262,6 +258,23 @@ export async function updateMatch(input: {
       ...data,
       matches: current ? data.matches.map((item) => (item.id === current.id ? match : item)) : [match, ...data.matches],
       registrations
+    });
+  }
+}
+
+export async function updatePaymentSettings(input: Omit<PaymentSettings, "id" | "updated_at">) {
+  try {
+    await adminAction({ action: "updatePaymentSettings", paymentSettings: input });
+  } catch (error) {
+    if (!canFallbackToDemo(error)) throw error;
+    const data = loadDemoData();
+    saveDemoData({
+      ...data,
+      paymentSettings: {
+        id: "default",
+        ...input,
+        updated_at: new Date().toISOString()
+      }
     });
   }
 }

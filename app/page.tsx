@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { LoadingCard } from "@/components/loading-card";
 import { ErrorCard } from "@/components/error-card";
 import { PublicList } from "@/components/public-list";
-import type { AppData, Match, RegistrationWithPlayer } from "@/lib/types";
+import type { AppData, Match, PaymentSettings, RegistrationWithPlayer } from "@/lib/types";
 import { getCurrentMatch, getData, getPublicLists } from "@/lib/store";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { StatusPill } from "@/components/status-pill";
@@ -24,6 +24,7 @@ export default function HomePage() {
   const [counts, setCounts] = useState({ confirmed: 0, waitlist: 0, available: 0 });
   const [confirmed, setConfirmed] = useState<RegistrationWithPlayer[]>([]);
   const [waitlist, setWaitlist] = useState<RegistrationWithPlayer[]>([]);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [copiedPaymentKey, setCopiedPaymentKey] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,6 +33,7 @@ export default function HomePage() {
       .then((data: AppData) => {
         const current = getCurrentMatch(data);
         setMatch(current);
+        setPaymentSettings(data.paymentSettings ?? null);
         if (current) {
           const lists = getPublicLists(data, current);
           setConfirmed(lists.confirmed);
@@ -87,18 +89,18 @@ export default function HomePage() {
           <Banknote className="text-pitch" size={24} />
         </div>
         <div className="mt-4 grid gap-2 text-sm font-semibold text-ink/70">
-          <p>Responsable: <span className="font-black text-ink">{match.payment_responsible_name || "Por definir"}</span></p>
-          <p>{match.payment_key_type || "Llave"}: <span className="font-black text-ink">{match.payment_key || "Por definir"}</span></p>
-          {match.payment_deadline ? <p>Fecha límite: <span className="font-black text-ink">{match.payment_deadline}</span></p> : null}
-          {match.payment_note ? <p className="rounded-lg bg-line/70 p-3">{match.payment_note}</p> : null}
+          <p>Responsable: <span className="font-black text-ink">{paymentSettings?.responsible_name || "Por definir"}</span></p>
+          <p>{paymentSettings?.payment_key_type || "Llave"}: <span className="font-black text-ink">{paymentSettings?.payment_key || "Por definir"}</span></p>
+          {paymentSettings?.payment_deadline ? <p>Fecha límite: <span className="font-black text-ink">{paymentSettings.payment_deadline}</span></p> : null}
+          {paymentSettings?.payment_note ? <p className="rounded-lg bg-line/70 p-3">{paymentSettings.payment_note}</p> : null}
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button
             className="secondary-button"
-            disabled={!match.payment_key}
+            disabled={!paymentSettings?.payment_key}
             onClick={async () => {
-              if (!match.payment_key) return;
-              await navigator.clipboard.writeText(match.payment_key);
+              if (!paymentSettings?.payment_key) return;
+              await navigator.clipboard.writeText(paymentSettings.payment_key);
               setCopiedPaymentKey(true);
               window.setTimeout(() => setCopiedPaymentKey(false), 1400);
             }}

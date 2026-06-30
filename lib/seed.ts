@@ -82,5 +82,14 @@ export const seedData: AppData = {
       notes: null,
       created_at: "2026-06-29T22:30:00.000Z"
     }
-  ]
+  ],
+  paymentSettings: {
+    id: "default",
+    responsible_name: "Admin Fútbol Lunes",
+    payment_key: "3000000000",
+    payment_key_type: "Nequi",
+    payment_deadline: "Antes del partido",
+    payment_note: "Reporta el pago desde la app para que el administrador lo revise.",
+    updated_at: created
+  }
 };

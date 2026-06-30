@@ -5,6 +5,16 @@ export type DeclaredStatus = "confirmed" | "waitlist" | "unknown";
 export type AdminDecision = "pending" | "waived" | "debt" | "replaced";
 export type PaymentStatus = "pending" | "pending_review" | "paid" | "rejected" | "debt" | "waived";
 
+export type PaymentSettings = {
+  id: string;
+  responsible_name?: string | null;
+  payment_key?: string | null;
+  payment_key_type?: string | null;
+  payment_deadline?: string | null;
+  payment_note?: string | null;
+  updated_at?: string | null;
+};
+
 export type Match = {
   id: string;
   date: string;
@@ -86,6 +96,7 @@ export type AppData = {
   cancellations: Cancellation[];
   payments: Payment[];
   attendance: Attendance[];
+  paymentSettings?: PaymentSettings | null;
 };
 
 export type RegistrationWithPlayer = Registration & {

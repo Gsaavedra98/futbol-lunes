@@ -8,6 +8,7 @@ import type {
   Match,
   MatchStatus,
   Payment,
+  PaymentSettings,
   PaymentStatus,
   Player,
   Registration,
@@ -43,6 +44,19 @@ type CancellationRpcRow = {
   possible_debt: boolean;
   promoted_player_id: string | null;
 };
+
+function paymentSettingsFromMatch(match?: Match | null): PaymentSettings | null {
+  if (!match) return null;
+  return {
+    id: "default",
+    responsible_name: match.payment_responsible_name ?? null,
+    payment_key: match.payment_key ?? null,
+    payment_key_type: match.payment_key_type ?? null,
+    payment_deadline: match.payment_deadline ?? null,
+    payment_note: match.payment_note ?? null,
+    updated_at: null
+  };
+}
 
 export async function getPlayerSuggestionsFromSupabase() {
   const supabase = createAdminSupabaseClient();
@@ -85,9 +99,10 @@ export async function getPublicDataFromSupabase() {
     throw new Error(missingDatabaseMessage);
   }
 
-  const [matches, list] = await Promise.all([
+  const [matches, list, paymentSettings] = await Promise.all([
     supabase.from("matches").select("*").eq("status", "open").order("date", { ascending: true }).limit(1),
-    supabase.from("public_match_registrations").select("*").order("position", { ascending: true })
+    supabase.from("public_match_registrations").select("*").order("position", { ascending: true }),
+    supabase.from("payment_settings").select("*").eq("id", "default").maybeSingle<PaymentSettings>()
   ]);
 
   if (matches.error || list.error) {
@@ -111,8 +126,10 @@ export async function getPublicDataFromSupabase() {
     created_at: row.created_at
   }));
 
+  const currentMatches = (matches.data ?? []) as Match[];
+
   return {
-    matches: (matches.data ?? []) as Match[],
+    matches: currentMatches,
     players,
     registrations,
     cancellations: [],
@@ -125,7 +142,8 @@ export async function getPublicDataFromSupabase() {
       reason: null,
       created_at: row.created_at
     })),
-    attendance: []
+    attendance: [],
+    paymentSettings: paymentSettings.error ? paymentSettingsFromMatch(currentMatches[0]) : paymentSettings.data ?? paymentSettingsFromMatch(currentMatches[0])
   } satisfies AppData;
 }
 
@@ -233,13 +251,14 @@ export async function getAdminDataFromSupabase() {
     throw new Error(missingDatabaseMessage);
   }
 
-  const [matches, players, registrations, cancellations, payments, attendance] = await Promise.all([
+  const [matches, players, registrations, cancellations, payments, attendance, paymentSettings] = await Promise.all([
     supabase.from("matches").select("*").order("date", { ascending: true }),
     supabase.from("players").select("*").order("created_at", { ascending: true }),
     supabase.from("registrations").select("*").order("position", { ascending: true }),
     supabase.from("cancellations").select("*").order("created_at", { ascending: false }),
     supabase.from("payments").select("*").order("created_at", { ascending: false }),
-    supabase.from("attendance").select("*").order("created_at", { ascending: false })
+    supabase.from("attendance").select("*").order("created_at", { ascending: false }),
+    supabase.from("payment_settings").select("*").eq("id", "default").maybeSingle<PaymentSettings>()
   ]);
 
   const error = [matches, players, registrations, cancellations, payments, attendance].find((result) => result.error)?.error;
@@ -247,13 +266,16 @@ export async function getAdminDataFromSupabase() {
     throw new Error(error.message);
   }
 
+  const currentMatches = (matches.data ?? []) as Match[];
+
   return {
-    matches: (matches.data ?? []) as Match[],
+    matches: currentMatches,
     players: (players.data ?? []) as Player[],
     registrations: (registrations.data ?? []) as Registration[],
     cancellations: (cancellations.data ?? []) as Cancellation[],
     payments: (payments.data ?? []) as Payment[],
-    attendance: (attendance.data ?? []) as Attendance[]
+    attendance: (attendance.data ?? []) as Attendance[],
+    paymentSettings: paymentSettings.error ? paymentSettingsFromMatch(currentMatches[0]) : paymentSettings.data ?? paymentSettingsFromMatch(currentMatches[0])
   } satisfies AppData;
 }
 
@@ -347,11 +369,6 @@ export async function updateMatchInSupabase(input: {
   time: string;
   location: string;
   price_per_player: number;
-  payment_responsible_name?: string | null;
-  payment_key?: string | null;
-  payment_key_type?: string | null;
-  payment_deadline?: string | null;
-  payment_note?: string | null;
   active_capacity: 12 | 18 | 20;
   status: MatchStatus;
 }) {
@@ -366,6 +383,28 @@ export async function updateMatchInSupabase(input: {
   }
 
   await recalculateMatchRegistrationsInSupabase(match.id);
+}
+
+export async function updatePaymentSettingsInSupabase(input: Omit<PaymentSettings, "id" | "updated_at">) {
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) {
+    throw new Error(missingDatabaseMessage);
+  }
+
+  const payload = {
+    id: "default",
+    responsible_name: input.responsible_name?.trim() || null,
+    payment_key: input.payment_key?.trim() || null,
+    payment_key_type: input.payment_key_type?.trim() || null,
+    payment_deadline: input.payment_deadline?.trim() || null,
+    payment_note: input.payment_note?.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from("payment_settings").upsert(payload, { onConflict: "id" });
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function updateRegistrationStatusInSupabase(registrationId: string, status: RegistrationStatus) {
